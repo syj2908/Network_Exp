@@ -8,12 +8,20 @@
 #include <pthread.h>    //g++ -pthread -o server server.cpp
 #include <string.h>
 
-#define IP "192.168.134.128" //服务器IP
+#define IP "192.168.140.128" //服务器IP
 #define PORT 8000            //服务器端口号
-#define QUE_NUM 20           //最大连接数
+#define QUE_NUM 2           //最大连接数
 #define MAX_BUFF_LEN 1024    //最大缓冲区长度
 
 using namespace std;
+
+/*
+    V1.2    2021/4/13
+        *允许多人连接到服务器
+        *服务器能收到来自各个用户的消息
+        *但是服务器只能发消息到某一用户
+        *用户断开连接过程也有问题
+*/
 
 void *send_func(void *arg)
 {
@@ -64,7 +72,9 @@ int main()
 {
     pthread_t send_thread, recv_thread;
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-    int conn_fd;
+    int conn_fd[QUE_NUM];
+    int send_result[QUE_NUM];
+    int recv_result[QUE_NUM];
     int link_num = 0;   //已连接人数
     struct sockaddr_in clint_addr[QUE_NUM]; //客户端地址数组
 
@@ -90,40 +100,42 @@ int main()
 
     cout << "Waiting for Connect..." << endl;
 
-    while (link_num < QUE_NUM)
+    for (link_num = 0; link_num < 2; link_num++)
     {
         socklen_t clint_addr_size = sizeof(clint_addr[link_num]);
-        if ((conn_fd = accept(sock_fd, (struct sockaddr *)&clint_addr[link_num], &clint_addr_size)) == -1)
+        if ((conn_fd[link_num] = accept(sock_fd, (struct sockaddr *)&clint_addr[link_num], &clint_addr_size)) == -1)
         {
             cout << "accept fail" << endl;
             exit(1);
         }
-        else
+        
+        cout << "User " << inet_ntoa(clint_addr[link_num].sin_addr) << " Has Connect!" << endl;
+
+        // int temp_fd = conn_fd[link_num];
+        send_result[link_num] = pthread_create(&send_thread, NULL, send_func, (void *)(long)conn_fd[link_num]);
+        recv_result[link_num] = pthread_create(&recv_thread, NULL, recv_func, (void *)(long)conn_fd[link_num]);
+
+        if (send_result[link_num] != 0)
         {
-            cout << "User " << inet_ntoa(clint_addr[link_num].sin_addr) << " Has Connect!" << endl;
-            link_num++;
+            cout << "send_thread create fail" << endl;
+            cout << errno << endl;
+            exit(1);
+        }
+        if (recv_result[link_num] != 0)
+        {
+            cout << "recv_thread create fail" << endl;
+            cout << errno << endl;
+            exit(1);
         }
     }
 
-    int send_result = pthread_create(&send_thread, NULL, send_func, (void *)(long)conn_fd);
-    int recv_result = pthread_create(&recv_thread, NULL, recv_func, (void *)(long)conn_fd);
-
-    if (send_result != 0)
-    {
-        cout << "send_thread create fail" << endl;
-        exit(1);
-    }
-    if (recv_result != 0)
-    {
-        cout << "recv_thread create fail" << endl;
-        exit(1);
-    }
-    send_result = pthread_join(send_thread, NULL);
-    recv_result = pthread_join(recv_thread, NULL);
-
+    send_result[link_num] = pthread_join(send_thread, NULL);
+    recv_result[link_num] = pthread_join(recv_thread, NULL);
+    
     cout << "SYSTEM: Chat over." << endl;
 
-    close(conn_fd);
+    for (int i = 0; i < 2;i++)
+        close(conn_fd[i]);
     close(sock_fd);
     return 0;
 }
