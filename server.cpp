@@ -13,56 +13,83 @@
 #define QUE_NUM 2           //最大连接数
 #define MAX_BUFF_LEN 1024    //最大缓冲区长度
 
+int conn_fd[QUE_NUM];   //所有用户的套接字
 using namespace std;
 
 /*
-    V1.2    2021/4/13
-        *允许多人连接到服务器
-        *服务器能收到来自各个用户的消息
-        *但是服务器只能发消息到某一用户
-        *用户断开连接过程也有问题
+    V1.3    2021/4/16
+        *编写并测试了一个简单CSC聊天模型所需要的各种功能
+        **下一目标：用户验证
+        
 */
+
+struct INFO
+{
+    //传递给常驻recv线程的所有参数
+    int sock_fd;    //套接字
+    int NO; //编号
+};
+
+struct INFO_SEND
+{
+    //传递给send线程的所有参数
+    int dst_sock_fd;    //目的用户套接字
+    int NO; //编号
+    char buffer[MAX_BUFF_LEN];  //待发送内容
+};
 
 void *send_func(void *arg)
 {
-    int sock_fd = (int)(long)arg;
-    char send_buffer[MAX_BUFF_LEN];
-    while (1)
-    {
-        if (fgets(send_buffer, MAX_BUFF_LEN, stdin) == NULL)
-        {
-            continue;
-        }
-        else
-        {
-            if (send(sock_fd, send_buffer, sizeof(send_buffer), 0) == -1)
-            {
-                cout << "send message fail" << endl;
-                continue;
-            }
-            else
-            {
-                cout << "MESSAGE SEND: " << send_buffer << endl;
-            }
+    INFO_SEND *info_send = (INFO_SEND *)arg;
 
-            if (strncmp(send_buffer, "quit", 4) == 0)
-                break;
-        }
+    if (send(info_send->dst_sock_fd, info_send->buffer, sizeof(info_send->buffer), 0) == -1)
+    {
+        cout << "send message fail" << endl;
+        pthread_exit(0);
     }
+    else
+    {
+        cout << "MESSAGE SEND TO " << (info_send->NO == 0 ? 1 : 0) << ": " << info_send->buffer;
+    }
+
     pthread_exit(0);
 }
 
 void *recv_func(void *arg)
 {
-    int sock_fd = (int)(long)arg;
+    INFO *info = (INFO *)arg;
+    pthread_t send_thread0,send_thread1;
     char recv_buffer[MAX_BUFF_LEN];
+    int send_result;
+    INFO_SEND info_send;
+
     while (1)
     {
-        if (recv(sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
+        if (recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
         {
-            cout << "MESSAGE RECV: " << recv_buffer << endl;
-        }
+            cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer;
 
+            info_send.NO = info->NO;
+            info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
+            strcpy(info_send.buffer, recv_buffer);
+
+            if(info->NO==0)
+            {
+                send_result = pthread_create(&send_thread0, NULL, send_func, &info_send);
+            }
+            else if(info->NO==1)
+            {
+                send_result = pthread_create(&send_thread1, NULL, send_func, &info_send);
+            }
+        }
+        if(info->NO==0)
+        {
+            send_result = pthread_join(send_thread0, NULL);
+        }
+        else if(info->NO==1)
+        {
+            send_result = pthread_join(send_thread1, NULL);
+        }
         if (strncmp(recv_buffer, "quit", 4) == 0)
             break;
     }
@@ -70,20 +97,17 @@ void *recv_func(void *arg)
 
 int main()
 {
-    pthread_t send_thread, recv_thread;
+    pthread_t recv_thread0, recv_thread1;
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-    int conn_fd[QUE_NUM];
-    int send_result[QUE_NUM];
     int recv_result[QUE_NUM];
     int link_num = 0;   //已连接人数
     struct sockaddr_in clint_addr[QUE_NUM]; //客户端地址数组
+    INFO info[QUE_NUM];    //传递参数的数组
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(PORT);
     server_addr.sin_addr.s_addr = inet_addr(IP);
-
- 
 
     if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
     {
@@ -110,17 +134,19 @@ int main()
         }
         
         cout << "User " << inet_ntoa(clint_addr[link_num].sin_addr) << " Has Connect!" << endl;
+    
+        info[link_num].sock_fd = conn_fd[link_num];
+        info[link_num].NO = link_num;
 
-        // int temp_fd = conn_fd[link_num];
-        send_result[link_num] = pthread_create(&send_thread, NULL, send_func, (void *)(long)conn_fd[link_num]);
-        recv_result[link_num] = pthread_create(&recv_thread, NULL, recv_func, (void *)(long)conn_fd[link_num]);
-
-        if (send_result[link_num] != 0)
+        if(link_num==0)
         {
-            cout << "send_thread create fail" << endl;
-            cout << errno << endl;
-            exit(1);
+            recv_result[link_num] = pthread_create(&recv_thread0, NULL, recv_func, &info[link_num]);
         }
+        else if(link_num==1)
+        {
+            recv_result[link_num] = pthread_create(&recv_thread1, NULL, recv_func, &info[link_num]);
+        }
+
         if (recv_result[link_num] != 0)
         {
             cout << "recv_thread create fail" << endl;
@@ -129,8 +155,8 @@ int main()
         }
     }
 
-    send_result[link_num] = pthread_join(send_thread, NULL);
-    recv_result[link_num] = pthread_join(recv_thread, NULL);
+    recv_result[0] = pthread_join(recv_thread0, NULL);
+    recv_result[1] = pthread_join(recv_thread1, NULL);
     
     cout << "SYSTEM: Chat over." << endl;
 

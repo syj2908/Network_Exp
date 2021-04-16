@@ -9,7 +9,7 @@
 #include<pthread.h>
 
 #define SERVER_PORT 8000
-#define SERVER_IP "192.168.134.128"
+#define SERVER_IP "192.168.140.128"
 #define MAX_BUFF_LEN 1024
 
 using namespace std;
@@ -33,9 +33,7 @@ void *send_func(void *arg)
             }
             else
             {
-                cout << endl;
                 cout << "MESSAGE SEND: " << send_buffer << endl;
-                cout << "-->";
             }
 
             if (strncmp(send_buffer, "quit", 4) == 0)
@@ -53,9 +51,7 @@ void *recv_func(void *arg)
     {
         if (recv(sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
         {
-            cout << endl;
             cout << "MESSAGE RECV: " << recv_buffer << endl;
-            cout << "-->";
         }
 
         if (strncmp(recv_buffer, "quit", 4) == 0)
