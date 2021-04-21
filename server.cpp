@@ -19,8 +19,8 @@ using namespace std;
 /*
     V1.3    2021/4/16
         *编写并测试了一个简单CSC聊天模型所需要的各种功能
-        **下一目标：用户验证
-        
+        *实现了服务器端的用户验证功能，但还需要和客户端对接口令的传输格式
+
 */
 
 struct INFO
@@ -37,6 +37,39 @@ struct INFO_SEND
     int NO; //编号
     char buffer[MAX_BUFF_LEN];  //待发送内容
 };
+
+char *format(char str[],int n)
+{
+    //删除fgets得到的字符串的末尾换行符
+
+    for (int i = 0; i < n;i++)
+    {
+        if(str[i]=='\n')
+        {
+            str[i] = '\0';
+        }
+    }
+    return str;
+}
+
+void ID_verify(int sock_fd)
+{
+    char Key[100]={0};
+    char passwd[] = "syj 123";
+
+    while(strcmp(Key,passwd))
+    {
+        if (recv(sock_fd, Key, sizeof(Key), 0) > 0)
+        {
+            format(Key,sizeof(Key));
+            cout << "User " << Key << " is trying to login." << endl;
+        }
+    }
+
+    cout << "User " << Key << " has login." << endl;
+    char success[] = "login success, welcome!";
+    send(sock_fd, success, sizeof(success), 0);
+}
 
 void *send_func(void *arg)
 {
@@ -62,6 +95,8 @@ void *recv_func(void *arg)
     char recv_buffer[MAX_BUFF_LEN];
     int send_result;
     INFO_SEND info_send;
+
+    ID_verify(conn_fd[info->NO]);
 
     while (1)
     {
@@ -132,7 +167,7 @@ int main()
             cout << "accept fail" << endl;
             exit(1);
         }
-        
+
         cout << "User " << inet_ntoa(clint_addr[link_num].sin_addr) << " Has Connect!" << endl;
     
         info[link_num].sock_fd = conn_fd[link_num];
