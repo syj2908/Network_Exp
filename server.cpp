@@ -8,7 +8,7 @@
 #include <pthread.h>    //g++ -pthread -o server server.cpp
 #include <string.h>
 
-#define IP "192.168.140.128" //服务器IP
+#define IP "192.168.1.103" //服务器IP
 #define PORT 8000            //服务器端口号
 #define QUE_NUM 2           //最大连接数
 #define MAX_BUFF_LEN 1024    //最大缓冲区长度
@@ -56,26 +56,32 @@ void ID_verify(int sock_fd)
 {
     char Key[100]={0};
     char passwd[] = "syj 123";
-
-    while(strcmp(Key,passwd))
+    char success[] = "login success, welcome!";
+    char fail[] = "login failed!";
+    while(1)
     {
         if (recv(sock_fd, Key, sizeof(Key), 0) > 0)
         {
-            format(Key,sizeof(Key));
-            cout << "User " << Key << " is trying to login." << endl;
+            if(strcmp(Key,passwd)!=0)
+            {
+                format(Key,sizeof(Key));
+                cout << "User " << Key << " is trying to login." << endl;
+                send(sock_fd, fail, (int)strlen(fail), 0);
+            }
+            else
+                break;
         }
     }
 
     cout << "User " << Key << " has login." << endl;
-    char success[] = "login success, welcome!";
-    send(sock_fd, success, sizeof(success), 0);
+    send(sock_fd, success, (int)strlen(success), 0);
 }
 
 void *send_func(void *arg)
 {
     INFO_SEND *info_send = (INFO_SEND *)arg;
 
-    if (send(info_send->dst_sock_fd, info_send->buffer, sizeof(info_send->buffer), 0) == -1)
+    if (send(info_send->dst_sock_fd, info_send->buffer, (int)strlen(info_send->buffer), 0) == -1)
     {
         cout << "send message fail" << endl;
         pthread_exit(0);
@@ -87,7 +93,39 @@ void *send_func(void *arg)
 
     pthread_exit(0);
 }
+void ftplixian(int sock_fd)
+{
+    char filename[100] = "test.mp4";  //文件名
+    FILE *fp = fopen(filename, "wb"); //以二进制方式打开（创建）文件
+    char buffer[MAX_BUFF_LEN] = {0};  //文件缓冲区
+    int nCount;
+    while(1)
+    {
+        recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
+        if(strncmp(buffer, "finstart", 8) == 0)
+        break;
+    }
+    cout<<"start";
+    while( 1 )
+    {
+        nCount = recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
+        if(strncmp(buffer, "ftpfin", 6) == 0)
+            break;
+        if(nCount>0)
+        {
+             fwrite(buffer,nCount,1,fp);
+        }
+    }
+    fclose(fp);
+    char success[]="File transfer success!";
+    puts("File transfer success!");
+    send(sock_fd, success, sizeof(success), 0);
+    
+}
+void ftpzaixian(int sock_fd)
+{
 
+}
 void *recv_func(void *arg)
 {
     INFO *info = (INFO *)arg;
@@ -127,6 +165,17 @@ void *recv_func(void *arg)
         }
         if (strncmp(recv_buffer, "quit", 4) == 0)
             break;
+        if(strncmp(recv_buffer, "ftpreqlixian", 12) == 0)
+        {
+            ftplixian(info->sock_fd);
+            continue;
+        }
+        if(strncmp(recv_buffer, "ftpreqzaixian", 13) == 0)
+        {
+            ftpzaixian(info->sock_fd);
+            continue;
+        }
+
     }
 }
 
