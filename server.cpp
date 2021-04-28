@@ -93,20 +93,23 @@ void *send_func(void *arg)
 
     pthread_exit(0);
 }
-void ftplixian(int sock_fd)
+void ftp_online(int sock_fd)
 {
     char filename[100] = "test.mp4";  //文件名
     FILE *fp = fopen(filename, "wb"); //以二进制方式打开（创建）文件
-    char buffer[MAX_BUFF_LEN] = {0};  //文件缓冲区
+    char buffer[MAX_BUFF_LEN];  //文件缓冲区
     int nCount;
+    
     while(1)
     {
         recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
         if(strncmp(buffer, "finstart", 8) == 0)
-        break;
+            break;
     }
+    
     cout<<"start";
-    while( 1 )
+    
+    while(1)
     {
         nCount = recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
         if(strncmp(buffer, "ftpfin", 6) == 0)
@@ -118,14 +121,15 @@ void ftplixian(int sock_fd)
     }
     fclose(fp);
     char success[]="File transfer success!";
-    puts("File transfer success!");
+    cout<<"File transfer success!"<<endl;
     send(sock_fd, success, sizeof(success), 0);
-    
 }
+
 void ftpzaixian(int sock_fd)
 {
 
 }
+
 void *recv_func(void *arg)
 {
     INFO *info = (INFO *)arg;
