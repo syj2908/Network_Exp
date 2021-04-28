@@ -93,6 +93,7 @@ void *send_func(void *arg)
 
     pthread_exit(0);
 }
+
 void ftp_online(int sock_fd)
 {
     char filename[100] = "test.mp4";  //文件名
