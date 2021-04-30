@@ -8,7 +8,7 @@
 #include <pthread.h>    //g++ -pthread -o server server.cpp
 #include <string.h>
 
-#define IP "192.168.1.103" //服务器IP
+#define IP "192.168.140.128" //服务器IP
 #define PORT 8000            //服务器端口号
 #define QUE_NUM 2           //最大连接数
 #define MAX_BUFF_LEN 1024  //最大缓冲区长度
@@ -56,8 +56,8 @@ void ID_verify(int sock_fd)
 {
     char Key[100]={0};
     char passwd[] = "syj 123";
-    char success[] = "login success, welcome!";
-    char fail[] = "login failed!";
+    char success[] = "1";
+    char fail[] = "-1";
     while(1)
     {
         if (recv(sock_fd, Key, sizeof(Key), 0) > 0)
@@ -161,7 +161,7 @@ void ftp_online(int FTP_SEND)
     char success[] = "File transfer success!";
     send(conn_fd[FTP_SEND], success, (int)strlen(success), 0);
     char fin[] = "ftpfin";
-    _sleep(5*100);
+    sleep(5*100);
     send(conn_fd[FTP_RECV], fin, (int)strlen(fin), 0);
     cout << "File transfer success!"<<endl;
 }

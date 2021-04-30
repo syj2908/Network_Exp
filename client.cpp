@@ -1,4 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
+#define DEFAULT_BUFLEN 1024
+#define DEFAULT_PORT "8000"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -8,87 +10,91 @@
 #include <pthread.h>
 #include <iostream>
 #include <string.h>
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "Mswsock.lib")
+#pragma comment(lib, "AdvApi32.lib")
+#pragma comment(lib, "pthreadVC2.lib")
+
 using namespace std;
 
-// Á´½Óµ½Ïà¹ØÎÄ¼ş
-#pragma comment (lib, "Ws2_32.lib")
-#pragma comment (lib, "Mswsock.lib")
-#pragma comment (lib, "AdvApi32.lib")
-#pragma comment (lib, "pthreadVC2.lib")
+void login(SOCKET *soc);
+void ftp_send(SOCKET *soc);
+void ftp_recv(SOCKET *soc);
+// void client_interface(SOCKET *soc);
+void *send_func(void *arg);
+void *recv_func(void *arg);
+void person_chat(SOCKET *soc);
 
-
-#define DEFAULT_BUFLEN 1024
-#define DEFAULT_PORT "8000"
-
-
-void person_chat(SOCKET* soc);
-void log_in (SOCKET* soc)
+void login(SOCKET *soc)
 {
+    //check username and passwd
+
     system("cls");
-	cout<<"------------------------------------------------------------------------"<<endl;
-    char username[20]={0};
-	char secret[10]={0}; 
-    char kongge[2]=" ";
-    char rec_log[50]={0};
-    char c;
+
+    char username[20] = {0};
+    char passwd[20] = {0};
+    char uname_pwd[50] = {0};
+    char space[] = " ";
+    char rec_log[10] = {0};
+
+    cout << "------------------------------------------------------------------------" << endl;
+
     while (1)
     {
-        printf("ÇëÊäÈëÄúµÄÓÃ»§Ãû£º");
-        c = getchar();
-        /*gets_s(username, 19);
-        printf("ÇëÊäÈëÄúµÄÃÜÂë£º");
-        gets_s(secret, 9);
-        strcat_s(username, kongge);
-        strcat_s(username, secret);*/
-        
+        printf("Please input your UserName: ");
+        cin.sync();
         gets(username);
-        printf("ÇëÊäÈëÄúµÄÃÜÂë£º");
-        gets(secret);
-        strcat(username, kongge);
-        strcat(username, secret);
-        
-        send(*soc, username, (int)strlen(username), 0);
-        recv(*soc, rec_log, 50, 0);
-        puts(rec_log);
-        if (strncmp(rec_log, "login success, welcome!", 23) == 0)
+        printf("Please input your PassWord: ");
+        cin.sync();
+        gets(passwd);
+
+        strcat(username, space);
+        strcat(username, passwd);
+        strcpy(uname_pwd, username);
+
+        send(*soc, uname_pwd, (int)strlen(uname_pwd), 0);
+        recv(*soc, rec_log, 10, 0);
+
+        if (strncmp(rec_log, "1", 1) == 0)
         {
             break;
         }
     }
+    printf("Authentication succeeded, linked to ChatRoom.\n");
 }
 
-void ftp_send(SOCKET* soc)
+void ftp_send(SOCKET *soc)
 {
     char ftp_req[50];
-    cout << "ÇëÑ¡ÔñÎÄ¼ş´«Êä·½Ê½£º" << endl;
-    cout << "ÀëÏß´«ÊäÇëÊäÈë1" << endl;
-    cout << "ÔÚÏß´«ÊäÇëÊäÈë2" << endl;
+    cout << "è¯·é€‰æ‹©æ–‡ä»¶ä¼ è¾“æ–¹å¼ï¼š" << endl;
+    cout << "ç¦»çº¿ä¼ è¾“è¯·è¾“å…¥1" << endl;
+    cout << "åœ¨çº¿ä¼ è¾“è¯·è¾“å…¥2" << endl;
     switch (getchar())
     {
 
-        case('1'):
-            strcpy(ftp_req, "ftpreqlixian"); 
-            send(*soc, ftp_req, (int)strlen(ftp_req), 0);
-            break;
-        case('2'):
-            strcpy(ftp_req, "ftpreqzaixian"); //
-            send(*soc, ftp_req, (int)strlen(ftp_req), 0);
-            break;
-        default:
-            cout << " ";
+    case ('1'):
+        strcpy(ftp_req, "ftpreqlixian");
+        send(*soc, ftp_req, (int)strlen(ftp_req), 0);
+        break;
+    case ('2'):
+        strcpy(ftp_req, "ftpreqzaixian"); //
+        send(*soc, ftp_req, (int)strlen(ftp_req), 0);
+        break;
+    default:
+        cout << " ";
     }
-    cout << "ÊäÈëÎÄ¼şÎ»ÖÃ£º" << endl;
-    cout << "ÊäÈëÎÄ¼şÃû£º" << endl;
-    char const *filename = "test.png";  //ÎÄ¼şÃû
+    cout << "è¾“å…¥æ–‡ä»¶ä½ç½®ï¼š" << endl;
+    cout << "è¾“å…¥æ–‡ä»¶åï¼š" << endl;
+    char const *filename = "test.png"; //æ–‡ä»¶å
     //FILE* fp;
     int err;
-    FILE* fp = fopen( "D:\\my_code\\vs code\\sock1.1\\Debug\\test1.mp4", "rb");
-    
-    if (err == 0) 
+    FILE *fp = fopen("D:\\my_code\\vs code\\sock1.1\\Debug\\test1.mp4", "rb");
+
+    if (err == 0)
     {
         printf("The file  was opened\n");
     }
-    else 
+    else
     {
         printf("The file  was not opened\n");
     }
@@ -98,26 +104,26 @@ void ftp_send(SOCKET* soc)
     char ftpstart[] = "ftpstart";
     send(*soc, ftpstart, (int)strlen(ftpstart), 0);
     int test;
-    while( (nCount = fread(sendbuf, 1, DEFAULT_BUFLEN, fp)) > 0 )
+    while ((nCount = fread(sendbuf, 1, DEFAULT_BUFLEN, fp)) > 0)
     {
         //sendbuf[nCount] = '\0';
-        test=send(*soc, sendbuf, nCount, 0);
+        test = send(*soc, sendbuf, nCount, 0);
         printf("%d", test);
     }
     fclose(fp);
     char fin[] = "ftpfin";
     Sleep(50);
-    test=send(*soc, fin, (int)strlen(fin), 0);
+    test = send(*soc, fin, (int)strlen(fin), 0);
     printf("%d", test);
-    printf("´«ÊäÍê±Ï");
+    printf("ä¼ è¾“å®Œæ¯•");
 }
 
-void ftp_recv(SOCKET* soc)
+void ftp_recv(SOCKET *soc)
 {
-    char filename[100] = "test.mp4";  //ÎÄ¼şÃû
-    
-    FILE* fp=fopen(filename, "wb"); //ÒÔ¶ş½øÖÆ·½Ê½´ò¿ª£¨´´½¨£©ÎÄ¼ş
-    char buffer[DEFAULT_BUFLEN] = { 0 };  //ÎÄ¼ş»º³åÇø
+    char filename[100] = "test.mp4"; //æ–‡ä»¶å
+
+    FILE *fp = fopen(filename, "wb");  //ä»¥äºŒè¿›åˆ¶æ–¹å¼æ‰“å¼€ï¼ˆåˆ›å»ºï¼‰æ–‡ä»¶
+    char buffer[DEFAULT_BUFLEN] = {0}; //æ–‡ä»¶ç¼“å†²åŒº
     int nCount;
     while (1)
     {
@@ -141,68 +147,59 @@ void ftp_recv(SOCKET* soc)
     cout << "File transfer success!";
     //send(*soc, success, sizeof(success), 0);
 }
-void client_interface(SOCKET* soc)//¿Í»§Ö÷½çÃæ
-{
-    cout<<"------------------------------------------------------------------------"<<endl;
-	cout<<"×ğ¾´µÄ¿Í»§£¬ÄúºÃ£¡"<<endl;
-	cout<<endl;
-	cout<<"ÇëÑ¡ÔñÄúÏëÒªÖ´ĞĞµÄ²Ù×÷:"<<endl;
-	cout<<endl;
-	cout<<"µ¥ÈËÁÄÌì           ÇëÊäÈë1"<<endl;
-	cout<<endl;
-	cout<<"¶àÈËÁÄÌì           ÇëÊäÈë2"<<endl;
-	cout<<endl;
-	cout<<"ÎÄ¼ş·¢ËÍ           ÇëÊäÈë3"<<endl;
-	cout<<endl;
-    cout<<"ÓïÒôÍ¨»°           ÇëÊäÈë4"<<endl;
-	cout<<endl;
-	cout<<"ÍË³ö³ÌĞò           ÇëÊäÈë5"<<endl;
-	cout<<"------------------------------------------------------------------------"<<endl;
-/*loop_ui:
-    switch(getchar())
-	{
-		case('1'):
-			system("cls");
-            person_chat(soc);
-            break;
-		case('2'):
-			system("cls");
-            break;
-		case('3'):
-            system("cls");
-            ftp_send(soc);
-            break;
-		case('4'):
-            break;
-        case('5'):
-            break;
-		default:
-			system("cls");
-			cout<<"------------------------------------------------------------------------"<<endl;
-			cout<<"ÃüÁîÎŞĞ§ ÇëÊäÈëÕıÈ·µÄÊı×Ö"<<endl;
-			cout<<"------------------------------------------------------------------------"<<endl;
-			goto loop_ui;
-            //system("pause");
 
-	 } */
-}
+// void client_interface(SOCKET *soc) 
+// {
+//     //main UI
+//     cout << "------------------------------------------------------------------------" << endl;
+//     cout << "å°Šæ•¬çš„å®¢æˆ·ï¼Œæ‚¨å¥½ï¼" << endl;
+//     cout << endl;
+//     cout << "è¯·é€‰æ‹©æ‚¨æƒ³è¦æ‰§è¡Œçš„æ“ä½œ:" << endl;
+//     cout << endl;
+//     cout << "å•äººèŠå¤©           è¯·è¾“å…¥1" << endl;
+//     cout << endl;
+//     cout << "å¤šäººèŠå¤©           è¯·è¾“å…¥2" << endl;
+//     cout << endl;
+//     cout << "æ–‡ä»¶å‘é€           è¯·è¾“å…¥3" << endl;
+//     cout << endl;
+//     cout << "è¯­éŸ³é€šè¯           è¯·è¾“å…¥4" << endl;
+//     cout << endl;
+//     cout << "é€€å‡ºç¨‹åº           è¯·è¾“å…¥5" << endl;
+//     cout << "------------------------------------------------------------------------" << endl;
+//     loop_ui:
+//     switch(getchar())
+// 	{
+// 		case('1'):
+// 			system("cls");
+//             person_chat(soc);
+//             break;
+// 		case('2'):
+// 			system("cls");
+//             break;
+// 		case('3'):
+//             system("cls");
+//             ftp_send(soc);
+//             break;
+// 		case('4'):
+//             break;
+//         case('5'):
+//             break;
+// 		default:
+// 			system("cls");
+// 			cout<<"------------------------------------------------------------------------"<<endl;
+// 			cout<<"å‘½ä»¤æ— æ•ˆ è¯·è¾“å…¥æ­£ç¡®çš„æ•°å­—"<<endl;
+// 			cout<<"------------------------------------------------------------------------"<<endl;
+// 			goto loop_ui;
+//             //system("pause");
+// 	 }
+// }
 
 void *send_func(void *arg)
 {
-    // Send an initial buffer
-    //int iResult;
+    //send thread's function
+
     char sendbuf[DEFAULT_BUFLEN];
-    SOCKET send_sock = (SOCKET)arg ;
-    
-    /*gets(sendbuf);
-    iResult = send(send_sock, sendbuf, (int)strlen(sendbuf), 0 );
-    if (iResult == SOCKET_ERROR) {
-        printf("send failed with error: %d\n", WSAGetLastError());
-        //closesocket(send_sock);
-        //WSACleanup();
-        //return 1;
-    }*/
-    //printf("Bytes Sent: %ld\n", iResult);
+    SOCKET send_sock = (SOCKET)arg;
 
     while (1)
     {
@@ -212,44 +209,37 @@ void *send_func(void *arg)
         }
         else
         {
-            if (strncmp(sendbuf, "quit", 4) == 0)
+            if (strncmp(sendbuf, "QUIT", 4) == 0)
                 break;
-            if (strncmp(sendbuf, "ftp", 3) == 0)
+            if (strncmp(sendbuf, "FTP", 3) == 0)
             {
                 ftp_send(&send_sock);
                 continue;
             }
-            if (send(send_sock, sendbuf, (int)strlen(sendbuf), 0 ) == -1)
+            if (send(send_sock, sendbuf, (int)strlen(sendbuf), 0) == -1)
             {
-                printf("send failed with error: %d\n", WSAGetLastError());
+                printf("-->Send failed with error: %d\n", WSAGetLastError());
                 continue;
             }
             else
             {
-                printf("Bytes Sent: %d\n", (int)strlen(sendbuf));
+                printf("-->Bytes Sent: %d\n", (int)strlen(sendbuf));
             }
         }
     }
-    // shutdown the connection since no more data will be sent
-    /*iResult = shutdown(ConnectSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) {
-        printf("shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(ConnectSocket);
-        WSACleanup();
-        return 1;
-    }*/
+
     pthread_exit(0);
-    return 0;
 }
+
 void *recv_func(void *arg)
 {
-    // Receive until the peer closes the connection
+    SOCKET rece_sock = (SOCKET)arg;
     int iResult;
-    SOCKET rece_sock = (SOCKET)arg ;
     char recvbuf[DEFAULT_BUFLEN] = {0};
     int recvbuflen = DEFAULT_BUFLEN;
-    
-    do {
+
+    do
+    {
 
         iResult = recv(rece_sock, recvbuf, recvbuflen, 0);
         if (strncmp(recvbuf, "ftpreq", 6) == 0)
@@ -257,29 +247,30 @@ void *recv_func(void *arg)
             ftp_recv(&rece_sock);
             continue;
         }
-        if ( iResult > 0 )
+        if (iResult > 0)
         {
             printf("Bytes received: %d\n", iResult);
             puts(recvbuf);
-        }    
-        else if ( iResult == 0 )
+        }
+        else if (iResult == 0)
             printf("Connection closed\n");
         else
             printf("recv failed with error: %d\n", WSAGetLastError());
 
-    } while( iResult > 0 );
+    } while (iResult > 0);
 
     return 0;
 }
-void person_chat(SOCKET* soc)
+
+void person_chat(SOCKET *soc)
 {
     pthread_t recv_p;
-	pthread_t send_p;
+    pthread_t send_p;
 
-    int send_result,recv_result;
+    int send_result, recv_result;
 
-    send_result=pthread_create(&send_p, NULL, send_func, (void*)*soc);
-    recv_result=pthread_create(&recv_p, NULL, recv_func, (void*)*soc);
+    send_result = pthread_create(&send_p, NULL, send_func, (void *)*soc);
+    recv_result = pthread_create(&recv_p, NULL, recv_func, (void *)*soc);
 
     if (send_result != 0)
     {
@@ -295,59 +286,65 @@ void person_chat(SOCKET* soc)
     send_result = pthread_join(send_p, NULL);
     recv_result = pthread_join(recv_p, NULL);
 }
-int __cdecl main(int argc, char **argv) 
+
+int __cdecl main(int argc, char **argv)
 {
     WSADATA wsaData;
     SOCKET ConnectSocket = INVALID_SOCKET;
     struct addrinfo *result = NULL,
                     *ptr = NULL,
-                    hints;  //ÕâÊÇÒ»¸ösockaddrÀàĞÍµÄ½á¹¹Ìå
+                    hints; //è¿™æ˜¯ä¸€ä¸ªsockaddrç±»å‹çš„ç»“æ„ä½“
 
     int iResult;
 
     // Validate the parameters
-    if (argc != 2) {
+    if (argc != 2)
+    {
         printf("usage: %s server-name\n", argv[0]);
         return 1;
     }
 
-    // ³õÊ¼»¯ Winsock
-    iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-        //ÓÃÀ´ÆôÓÃWs2_32.dll  2,2±íÊ¾ÇëÇówinsock2.2°æ±¾
-    if (iResult != 0) {
+    // åˆå§‹åŒ– Winsock
+    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    //ç”¨æ¥å¯ç”¨Ws2_32.dll  2,2è¡¨ç¤ºè¯·æ±‚winsock2.2ç‰ˆæœ¬
+    if (iResult != 0)
+    {
         printf("WSAStartup failed with error: %d\n", iResult);
         return 1;
     }
 
-    ZeroMemory( &hints, sizeof(hints) ); //ÓÃ0À´Ìî³ähintsµÄÄÚ´æ
-    hints.ai_family = AF_UNSPEC; //0£¬±íÊ¾Î´Ö¸Ã÷ÊÇipv4»¹ÊÇIPV6
-    hints.ai_socktype = SOCK_STREAM;  //1,±íÊ¾scoketÀàĞÍtcp
-    hints.ai_protocol = IPPROTO_TCP;    //6£¬±íÊ¾Êı¾İ´«ÊäÀàĞÍ
+    ZeroMemory(&hints, sizeof(hints)); //ç”¨0æ¥å¡«å……hintsçš„å†…å­˜
+    hints.ai_family = AF_UNSPEC;       //0ï¼Œè¡¨ç¤ºæœªæŒ‡æ˜æ˜¯ipv4è¿˜æ˜¯IPV6
+    hints.ai_socktype = SOCK_STREAM;   //1,è¡¨ç¤ºscoketç±»å‹tcp
+    hints.ai_protocol = IPPROTO_TCP;   //6ï¼Œè¡¨ç¤ºæ•°æ®ä¼ è¾“ç±»å‹
 
     // Resolve the server address and port
     iResult = getaddrinfo(argv[1], DEFAULT_PORT, &hints, &result); //8000
-    if ( iResult != 0 ) {
+    if (iResult != 0)
+    {
         printf("getaddrinfo failed with error: %d\n", iResult);
         WSACleanup();
         return 1;
     }
 
     // Attempt to connect to an address until one succeeds
-    for(ptr=result; ptr != NULL ;ptr=ptr->ai_next) 
+    for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
     {
 
         // Create a SOCKET for connecting to server
-        ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, 
-            ptr->ai_protocol);
-        if (ConnectSocket == INVALID_SOCKET) {
+        ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype,
+                               ptr->ai_protocol);
+        if (ConnectSocket == INVALID_SOCKET)
+        {
             printf("socket failed with error: %ld\n", WSAGetLastError());
             WSACleanup();
             return 1;
         }
 
         // Connect to server.
-        iResult = connect( ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-        if (iResult == SOCKET_ERROR) {
+        iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+        if (iResult == SOCKET_ERROR)
+        {
             closesocket(ConnectSocket);
             ConnectSocket = INVALID_SOCKET;
             continue;
@@ -357,55 +354,55 @@ int __cdecl main(int argc, char **argv)
 
     freeaddrinfo(result);
 
-    if (ConnectSocket == INVALID_SOCKET) {
+    if (ConnectSocket == INVALID_SOCKET)
+    {
         printf("Unable to connect to server!\n");
         WSACleanup();
         return 1;
     }
 
     system("cls");
-    cout<<"------------------------------------------------------------------------"<<endl;
-	cout<<"»¶Ó­À´µ½²×º£ÁÄÌìÊÒ!!!"<<endl;
-	cout<<endl;
-	cout<<"ÇëÑ¡ÔñÄúÏëÒªÖ´ĞĞµÄ²Ù×÷:"<<endl;
-	cout<<endl;
-	cout<<"µÇÂ¼ÒÑÓĞÕÊºÅ  ÇëÊäÈë1"<<endl;
-	cout<<endl;
-	cout<<"×¢²áÕËºÅ      ÇëÊäÈë2"<<endl;
-	cout<<endl;
-	cout<<"                                                              °æ±¾v1.0.0"<<endl;
-	cout<<"                                                °æÈ¨ËùÓĞ£ºXJTU ¸ßºÆÏè Ê©Ñ×½­ "<<endl;
-	cout<<"------------------------------------------------------------------------"<<endl;
+    cout << "------------------------------------------------------------------------" << endl;
+    cout << "æ¬¢è¿æ¥åˆ°æ²§æµ·èŠå¤©å®¤!!!" << endl;
+    cout << endl;
+    cout << "è¯·é€‰æ‹©æ‚¨æƒ³è¦æ‰§è¡Œçš„æ“ä½œ:" << endl;
+    cout << endl;
+    cout << "ç™»å½•å·²æœ‰å¸å·  è¯·è¾“å…¥1" << endl;
+    cout << endl;
+    cout << "æ³¨å†Œè´¦å·      è¯·è¾“å…¥2" << endl;
+    cout << endl;
+    cout << "                                                              ç‰ˆæœ¬v1.0.0" << endl;
+    cout << "                                                ç‰ˆæƒæ‰€æœ‰ï¼šXJTU é«˜æµ©ç¿” æ–½ç‚æ±Ÿ " << endl;
+    cout << "------------------------------------------------------------------------" << endl;
 
     while (1)
     {
         switch (getchar())
         {
-        case('1'):
-            log_in(&ConnectSocket);
+        case ('1'):
+            login(&ConnectSocket);
             break;
-        case('2'):
+        case ('2'):
             //id_register();
             break;
         default:
             system("cls");
             cout << "------------------------------------------------------------------------" << endl;
-            cout << "ÃüÁîÎŞĞ§ ÇëÊäÈëÕıÈ·µÄÊı×Ö" << endl;
+            cout << "å‘½ä»¤æ— æ•ˆ è¯·è¾“å…¥æ­£ç¡®çš„æ•°å­—" << endl;
             cout << "------------------------------------------------------------------------" << endl;
             system("pause");
         }
         break;
     }
-    
 
-    //¿ªÊ¼ÊÕ·¢ÎÄ¼ş
+    //å¼€å§‹æ”¶å‘æ–‡ä»¶
     pthread_t recv_p;
     pthread_t send_p;
 
     int send_result, recv_result;
 
-    send_result = pthread_create(&send_p, NULL, send_func, (void*)ConnectSocket);
-    recv_result = pthread_create(&recv_p, NULL, recv_func, (void*)ConnectSocket);
+    send_result = pthread_create(&send_p, NULL, send_func, (void *)ConnectSocket);
+    recv_result = pthread_create(&recv_p, NULL, recv_func, (void *)ConnectSocket);
 
     if (send_result != 0)
     {
