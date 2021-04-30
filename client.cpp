@@ -20,6 +20,8 @@ using namespace std;
 #define DEFAULT_BUFLEN 1024
 #define DEFAULT_PORT "8000"
 
+
+void person_chat(SOCKET* soc);
 void log_in (SOCKET* soc)
 {
     system("cls");
@@ -29,25 +31,32 @@ void log_in (SOCKET* soc)
     char kongge[2]=" ";
     char rec_log[50]={0};
     char c;
-log: 
-    printf("请输入您的用户名：");
-    c=getchar();
-	gets_s(username,19);
-    printf("请输入您的密码：");
-    gets_s(secret,9);
-    strcat_s(username, kongge);
-    strcat_s(username, secret);
-    send(*soc, username, (int)strlen(username), 0 );
-    recv(*soc, rec_log, 50, 0);
-    puts(rec_log);
-    if(rec_log[6]!='s')
+    while (1)
     {
-        goto log;
+        printf("请输入您的用户名：");
+        c = getchar();
+        /*gets_s(username, 19);
+        printf("请输入您的密码：");
+        gets_s(secret, 9);
+        strcat_s(username, kongge);
+        strcat_s(username, secret);*/
+        
+        gets(username);
+        printf("请输入您的密码：");
+        gets(secret);
+        strcat(username, kongge);
+        strcat(username, secret);
+        
+        send(*soc, username, (int)strlen(username), 0);
+        recv(*soc, rec_log, 50, 0);
+        puts(rec_log);
+        if (strncmp(rec_log, "login success, welcome!", 23) == 0)
+        {
+            break;
+        }
     }
-
 }
 
-void person_chat(SOCKET* soc);
 void ftp_send(SOCKET* soc)
 {
     char ftp_req[50];
@@ -58,11 +67,11 @@ void ftp_send(SOCKET* soc)
     {
 
         case('1'):
-            strcpy_s(ftp_req, "ftpreqlixian"); 
+            strcpy(ftp_req, "ftpreqlixian"); 
             send(*soc, ftp_req, (int)strlen(ftp_req), 0);
             break;
         case('2'):
-            strcpy_s(ftp_req, "ftpreqzaixian"); //
+            strcpy(ftp_req, "ftpreqzaixian"); //
             send(*soc, ftp_req, (int)strlen(ftp_req), 0);
             break;
         default:
@@ -71,9 +80,10 @@ void ftp_send(SOCKET* soc)
     cout << "输入文件位置：" << endl;
     cout << "输入文件名：" << endl;
     char const *filename = "test.png";  //文件名
-    FILE* fp;
+    //FILE* fp;
     int err;
-    err = fopen_s(&fp, "D:\\my_code\\vs code\\sock1.1\\Debug\\test1.mp4", "rb");
+    FILE* fp = fopen( "D:\\my_code\\vs code\\sock1.1\\Debug\\test1.mp4", "rb");
+    
     if (err == 0) 
     {
         printf("The file  was opened\n");
@@ -85,35 +95,34 @@ void ftp_send(SOCKET* soc)
 
     int nCount;
     char sendbuf[DEFAULT_BUFLEN] = {0};
-    char ftpstart[] = "finstart";
+    char ftpstart[] = "ftpstart";
     send(*soc, ftpstart, (int)strlen(ftpstart), 0);
     int test;
     while( (nCount = fread(sendbuf, 1, DEFAULT_BUFLEN, fp)) > 0 )
     {
+        //sendbuf[nCount] = '\0';
         test=send(*soc, sendbuf, nCount, 0);
-
-        printf("%d", nCount);
-        //if (test == 694)
-            //cout << "good";
+        printf("%d", test);
     }
     fclose(fp);
     char fin[] = "ftpfin";
-    send(*soc, fin, (int)strlen(fin), 0);
+    Sleep(50);
+    test=send(*soc, fin, (int)strlen(fin), 0);
+    printf("%d", test);
     printf("传输完毕");
-
 }
 
 void ftp_recv(SOCKET* soc)
 {
     char filename[100] = "test.mp4";  //文件名
-    FILE* fp;
-    fopen_s(&fp,filename, "wb"); //以二进制方式打开（创建）文件
+    
+    FILE* fp=fopen(filename, "wb"); //以二进制方式打开（创建）文件
     char buffer[DEFAULT_BUFLEN] = { 0 };  //文件缓冲区
     int nCount;
     while (1)
     {
         recv(*soc, buffer, DEFAULT_BUFLEN, 0);
-        if (strncmp(buffer, "finstart", 8) == 0)
+        if (strncmp(buffer, "ftpstart", 8) == 0)
             break;
     }
     cout << "start";
@@ -128,9 +137,9 @@ void ftp_recv(SOCKET* soc)
         }
     }
     fclose(fp);
-    char success[] = "File transfer success!";
-    puts("File transfer success!");
-    send(*soc, success, sizeof(success), 0);
+    //char success[] = "File transfer success!";
+    cout << "File transfer success!";
+    //send(*soc, success, sizeof(success), 0);
 }
 void client_interface(SOCKET* soc)//客户主界面
 {
@@ -219,9 +228,6 @@ void *send_func(void *arg)
             {
                 printf("Bytes Sent: %d\n", (int)strlen(sendbuf));
             }
-
-            /*if (strncmp(sendbuf, "quit", 4) == 0)
-                break;*/
         }
     }
     // shutdown the connection since no more data will be sent
@@ -240,12 +246,17 @@ void *recv_func(void *arg)
     // Receive until the peer closes the connection
     int iResult;
     SOCKET rece_sock = (SOCKET)arg ;
-    char recvbuf[DEFAULT_BUFLEN];
+    char recvbuf[DEFAULT_BUFLEN] = {0};
     int recvbuflen = DEFAULT_BUFLEN;
     
     do {
 
         iResult = recv(rece_sock, recvbuf, recvbuflen, 0);
+        if (strncmp(recvbuf, "ftpreq", 6) == 0)
+        {
+            ftp_recv(&rece_sock);
+            continue;
+        }
         if ( iResult > 0 )
         {
             printf("Bytes received: %d\n", iResult);
@@ -366,22 +377,26 @@ int __cdecl main(int argc, char **argv)
 	cout<<"                                                版权所有：XJTU 高浩翔 施炎江 "<<endl;
 	cout<<"------------------------------------------------------------------------"<<endl;
 
-    LOOP:switch(getchar())
-	{
-		case('1'):
-			log_in(&ConnectSocket); 
-			break;
-		case('2'):
-			//id_register();
-			break;
-		default:
-			system("cls");
-			cout<<"------------------------------------------------------------------------"<<endl;
-			cout<<"命令无效 请输入正确的数字"<<endl;
-			cout<<"------------------------------------------------------------------------"<<endl;
-			system("pause");
-            goto LOOP;
-	} 
+    while (1)
+    {
+        switch (getchar())
+        {
+        case('1'):
+            log_in(&ConnectSocket);
+            break;
+        case('2'):
+            //id_register();
+            break;
+        default:
+            system("cls");
+            cout << "------------------------------------------------------------------------" << endl;
+            cout << "命令无效 请输入正确的数字" << endl;
+            cout << "------------------------------------------------------------------------" << endl;
+            system("pause");
+        }
+        break;
+    }
+    
 
     //开始收发文件
     pthread_t recv_p;
