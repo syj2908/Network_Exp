@@ -8,12 +8,17 @@
 #include <pthread.h> //g++ -pthread -o server server.cpp
 #include <string.h>
 
-#define IP "192.168.43.219" //服务器IP
+#define IP "10.172.81.27" //服务器IP
 #define PORT 8000           //服务器端口号
+#define ftp_PORT 8006       //文件传输端口号
+#define voice_PORT 8008     //语音聊天
 #define QUE_NUM 2           //最大连接数
 #define MAX_BUFF_LEN 1024   //最大缓冲区长度
 
-int conn_fd[QUE_NUM]; //所有用户的套接字
+int conn_fd[QUE_NUM];   //所有用户的套接字
+int ftp_fd[QUE_NUM];    //文件传输用的套接字
+int sender;             //文件发送方info->NO
+
 using namespace std;
 
 /*
@@ -93,6 +98,7 @@ void *send_func(void *arg)
 
     pthread_exit(0);
 }
+
 void ftp_offline(int sock_fd)
 {
     char filename[100] = "test.mp4";  //文件名
@@ -131,44 +137,136 @@ void ftp_offline(int sock_fd)
     cout << "File transfer success!" << endl;
     send(sock_fd, success, sizeof(success), 0);
 }
+
 void ftp_online(int FTP_SEND)
 {
-    cout << "FTP_SEND"
-         << "套接字" << endl;
     int FTP_RECV = 1 - FTP_SEND;
     char ftpreq[] = "ftpreq";
-    send(conn_fd[FTP_RECV], ftpreq, (int)strlen(ftpreq), 0);
+
+    send(ftp_fd[FTP_RECV], ftpreq, (int)strlen(ftpreq), 0);
+
     char ftpstart[] = "ftpstart";
     char ftp_buffer[MAX_BUFF_LEN];
+
     while (1)
     {
-        recv(conn_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
+        recv(ftp_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
         if (strncmp(ftp_buffer, "ftpstart", 8) == 0)
             break;
     }
     int test;
-    test = send(conn_fd[FTP_RECV], ftpstart, (int)strlen(ftpstart), 0);
+    test = send(ftp_fd[FTP_RECV], ftpstart, (int)strlen(ftpstart), 0);
     cout << test << "开始" << endl;
     while (1)
     {
-        test = recv(conn_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
+        test = recv(ftp_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
         cout << "收" << test << endl;
         if (strncmp(ftp_buffer, "ftpfin", 6) == 0)
             break;
-        test = send(conn_fd[FTP_RECV], ftp_buffer, test, 0);
+        test = send(ftp_fd[FTP_RECV], ftp_buffer, test, 0);
         cout << "发" << test << endl;
     }
     char success[] = "File transfer success!";
-    send(conn_fd[FTP_SEND], success, (int)strlen(success), 0);
+    send(ftp_fd[FTP_SEND], success, (int)strlen(success), 0);
     char fin[] = "ftpfin";
     sleep(5 * 100);
-    send(conn_fd[FTP_RECV], fin, (int)strlen(fin), 0);
+    send(ftp_fd[FTP_RECV], fin, (int)strlen(fin), 0);
     cout << "File transfer success!" << endl;
 }
+
+void *waiting_func(void *arg)
+{
+    INFO *info = (INFO *)arg;
+    char recv_buffer[MAX_BUFF_LEN];
+    
+    if(recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
+    {
+        if(strncmp(recv_buffer, "I am sender.", 10) == 0)
+        {
+            sender = info->NO;
+        }
+    }
+    pthread_exit(0);
+}
+
+void *ftp_func(void *arg)
+{
+    int cmd = *(int *)arg;
+    int link_num = 0;
+    int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in client_addr[QUE_NUM];
+    INFO info[QUE_NUM];
+    pthread_t waiting_thread0, waiting_thread1;
+    int waiting_result[QUE_NUM];
+
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(ftp_PORT);
+    server_addr.sin_addr.s_addr = inet_addr(IP);
+
+    if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
+    {
+        cout << "ftp bind fail" << endl;
+        cout << errno << endl;
+        exit(1);
+    }
+
+    if (listen(sock_fd, QUE_NUM) == -1)
+    {
+        cout << "ftp listen fail" << endl;
+        exit(1);
+    }
+
+    cout << "preparing for file transmission..." << endl;
+
+    for (link_num = 0; link_num < QUE_NUM;link_num++)
+    {
+        socklen_t client_addr_size = sizeof(client_addr[link_num]);
+        if ((ftp_fd[link_num] = accept(sock_fd, (struct sockaddr *)&client_addr[link_num], &client_addr_size)) == -1)
+        {
+            cout << "ftp accept fail" << endl;
+            exit(1);
+        }
+
+        cout << "User " << inet_ntoa(client_addr[link_num].sin_addr) << " is ready to transmit file!" << endl;
+
+        info[link_num].sock_fd = ftp_fd[link_num];
+        info[link_num].NO = link_num;
+    }
+
+    for (int i = 0; i < QUE_NUM;i++)
+    {
+        char signal[] = "file transmission ready.";
+        send(ftp_fd[i], signal, (int)strlen(signal), 0);
+    }
+
+    waiting_result[0] = pthread_create(&waiting_thread0, NULL, waiting_func, &info[0]);
+    waiting_result[1] = pthread_create(&waiting_thread1, NULL, waiting_func, &info[1]);
+
+    waiting_result[0] = pthread_join(waiting_thread0, NULL);
+    waiting_result[1] = pthread_join(waiting_thread1, NULL);
+
+    if (cmd == 1)
+    {
+        ftp_offline(info[sender].sock_fd);
+    }
+    else if (cmd == 2)
+    {
+        ftp_online(sender);
+    }
+
+    cout << "File transmission success!" << endl;
+
+    for (int i = 0; i < 2; i++)
+        close(ftp_fd[i]);
+    close(sock_fd);
+    pthread_exit(0);
+}
+
 void *recv_func(void *arg)
 {
     INFO *info = (INFO *)arg;
-    pthread_t send_thread0, send_thread1;
+    pthread_t send_thread, ftp_thread;
     char recv_buffer[MAX_BUFF_LEN];
     int send_result;
     INFO_SEND info_send;
@@ -182,40 +280,32 @@ void *recv_func(void *arg)
         {
             cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer << endl;
 
-            if (strncmp(recv_buffer, "ftpreqlixian", 12) == 0)
+            if ((strncmp(recv_buffer, "FTPoffline", 10) == 0) || (strncmp(recv_buffer, "FTPonline", 9)== 0))
             {
-                cout << "recereq" << endl;
-                ftp_offline(info->sock_fd);
-                continue;
-            }
-            if (strncmp(recv_buffer, "ftpreqzaixian", 13) == 0)
-            {
-                ftp_online(info->NO);
+                int cmd;
+                if(strncmp(recv_buffer, "FTPoffline", 10) == 0)
+                {
+                    cmd = 1;
+                }
+                else if (strncmp(recv_buffer, "FTPonline", 9) == 0)
+                {
+                    cmd = 2;
+                }
+                int ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, &cmd);
                 continue;
             }
             if (strncmp(recv_buffer, "quit", 4) == 0)
+            {
                 break;
+            }
+
             info_send.NO = info->NO;
             info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
             strcpy(info_send.buffer, recv_buffer);
 
-            if (info->NO == 0)
-            {
-                send_result = pthread_create(&send_thread0, NULL, send_func, &info_send);
-            }
-            else if (info->NO == 1)
-            {
-                send_result = pthread_create(&send_thread1, NULL, send_func, &info_send);
-            }
+            send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
         }
-        if (info->NO == 0)
-        {
-            send_result = pthread_join(send_thread0, NULL);
-        }
-        else if (info->NO == 1)
-        {
-            send_result = pthread_join(send_thread1, NULL);
-        }
+        send_result = pthread_join(send_thread, NULL);
     }
 }
 
@@ -225,7 +315,7 @@ int main()
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     int recv_result[QUE_NUM];
     int link_num = 0;                       //已连接人数
-    struct sockaddr_in clint_addr[QUE_NUM]; //客户端地址数组
+    struct sockaddr_in client_addr[QUE_NUM]; //客户端地址数组
     INFO info[QUE_NUM];                     //传递参数的数组
 
     struct sockaddr_in server_addr;
@@ -250,14 +340,14 @@ int main()
 
     for (link_num = 0; link_num < 2; link_num++)
     {
-        socklen_t clint_addr_size = sizeof(clint_addr[link_num]);
-        if ((conn_fd[link_num] = accept(sock_fd, (struct sockaddr *)&clint_addr[link_num], &clint_addr_size)) == -1)
+        socklen_t client_addr_size = sizeof(client_addr[link_num]);
+        if ((conn_fd[link_num] = accept(sock_fd, (struct sockaddr *)&client_addr[link_num], &client_addr_size)) == -1)
         {
             cout << "accept fail" << endl;
             exit(1);
         }
 
-        cout << "User " << inet_ntoa(clint_addr[link_num].sin_addr) << " Has Connect!" << endl;
+        cout << "User " << inet_ntoa(client_addr[link_num].sin_addr) << " Has Connect!" << endl;
 
         info[link_num].sock_fd = conn_fd[link_num];
         info[link_num].NO = link_num;
