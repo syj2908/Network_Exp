@@ -8,10 +8,9 @@
 #include <pthread.h> //g++ -pthread -o server server.cpp
 #include <string.h>
 
-#define IP "10.172.81.27" //服务器IP
+#define IP "192.168.1.113" //服务器IP
 #define PORT 8000           //服务器端口号
 #define ftp_PORT 8006       //文件传输端口号
-#define voice_PORT 8008     //语音聊天
 #define QUE_NUM 2           //最大连接数
 #define MAX_BUFF_LEN 1024   //最大缓冲区长度
 
@@ -20,13 +19,6 @@ int ftp_fd[QUE_NUM];    //文件传输用的套接字
 int sender;             //文件发送方info->NO
 
 using namespace std;
-
-/*
-    V1.4    2021/4/21
-        *编写并测试了一个简单CSC聊天模型所需要的各种功能
-        *实现了服务器端的用户验证功能，但还需要和客户端对接口令的传输格式
-
-*/
 
 struct INFO
 {
@@ -82,23 +74,6 @@ void ID_verify(int sock_fd)
     send(sock_fd, success, (int)strlen(success), 0);
 }
 
-void *send_func(void *arg)
-{
-    INFO_SEND *info_send = (INFO_SEND *)arg;
-
-    if (send(info_send->dst_sock_fd, info_send->buffer, (int)strlen(info_send->buffer), 0) == -1)
-    {
-        cout << "send message fail" << endl;
-        pthread_exit(0);
-    }
-    else
-    {
-        cout << "MESSAGE SEND TO " << (info_send->NO == 0 ? 1 : 0) << ": " << info_send->buffer << endl;
-    }
-
-    pthread_exit(0);
-}
-
 void ftp_offline(int sock_fd)
 {
     char filename[100] = "test.mp4";  //文件名
@@ -121,7 +96,7 @@ void ftp_offline(int sock_fd)
     {
         nCount = recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
         //cout<<nCount<<endl;
-        if (strncmp(buffer, "ftpfin", 6) == 0)
+        if (strncmp(buffer, "FTPfin", 6) == 0)
         {
             cout << "传输完毕" << endl;
             break;
@@ -141,37 +116,32 @@ void ftp_offline(int sock_fd)
 void ftp_online(int FTP_SEND)
 {
     int FTP_RECV = 1 - FTP_SEND;
-    char ftpreq[] = "ftpreq";
-
-    send(ftp_fd[FTP_RECV], ftpreq, (int)strlen(ftpreq), 0);
-
-    char ftpstart[] = "ftpstart";
+    int send_ret, recv_ret;
     char ftp_buffer[MAX_BUFF_LEN];
 
+    cout << "FTP online" << endl;
+
     while (1)
     {
-        recv(ftp_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
-        if (strncmp(ftp_buffer, "ftpstart", 8) == 0)
+        recv_ret = recv(ftp_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
+        cout << "recv signal: " << recv_ret << endl;
+        if (strncmp(ftp_buffer, "FTPfin", 6) == 0)
+        {
+            sleep(1);
+            char fin[] = "FTPfin";
+            send(ftp_fd[FTP_RECV], fin, (int)strlen(fin), 0);
+            cout << "send FTPfin." << endl;
             break;
+        }
+        else
+        {
+            send_ret = send(ftp_fd[FTP_RECV], ftp_buffer, recv_ret, 0);
+            cout << "send signal: " << send_ret << endl;
+        }
     }
-    int test;
-    test = send(ftp_fd[FTP_RECV], ftpstart, (int)strlen(ftpstart), 0);
-    cout << test << "开始" << endl;
-    while (1)
-    {
-        test = recv(ftp_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
-        cout << "收" << test << endl;
-        if (strncmp(ftp_buffer, "ftpfin", 6) == 0)
-            break;
-        test = send(ftp_fd[FTP_RECV], ftp_buffer, test, 0);
-        cout << "发" << test << endl;
-    }
-    char success[] = "File transfer success!";
-    send(ftp_fd[FTP_SEND], success, (int)strlen(success), 0);
-    char fin[] = "ftpfin";
-    sleep(5 * 100);
-    send(ftp_fd[FTP_RECV], fin, (int)strlen(fin), 0);
-    cout << "File transfer success!" << endl;
+
+    // char success[] = "File transmission succeed!";
+    // send(ftp_fd[FTP_SEND], success, (int)strlen(success), 0);
 }
 
 void *waiting_func(void *arg)
@@ -228,23 +198,30 @@ void *ftp_func(void *arg)
             exit(1);
         }
 
-        cout << "User " << inet_ntoa(client_addr[link_num].sin_addr) << " is ready to transmit file!" << endl;
+        cout << link_num <<"User " << inet_ntoa(client_addr[link_num].sin_addr) << " is ready to transmit file!" << endl;
 
         info[link_num].sock_fd = ftp_fd[link_num];
         info[link_num].NO = link_num;
     }
 
-    for (int i = 0; i < QUE_NUM;i++)
-    {
-        char signal[] = "file transmission ready.";
-        send(ftp_fd[i], signal, (int)strlen(signal), 0);
-    }
+    // for (int i = 0; i < QUE_NUM;i++)
+    // {
+    //     char signal[] = "file transmission ready.";
+    //     if (send(ftp_fd[i], signal, (int)strlen(signal), 0) == -1)
+    //     {
+    //         cout << "signal send failed." << endl;
+    //     }
+    // }
+
+    cout << "message sent." << endl;
 
     waiting_result[0] = pthread_create(&waiting_thread0, NULL, waiting_func, &info[0]);
     waiting_result[1] = pthread_create(&waiting_thread1, NULL, waiting_func, &info[1]);
 
     waiting_result[0] = pthread_join(waiting_thread0, NULL);
     waiting_result[1] = pthread_join(waiting_thread1, NULL);
+
+    cout << "Sender confirm." << endl;
 
     if (cmd == 1)
     {
@@ -263,6 +240,23 @@ void *ftp_func(void *arg)
     pthread_exit(0);
 }
 
+void *send_func(void *arg)
+{
+    INFO_SEND *info_send = (INFO_SEND *)arg;
+
+    if (send(info_send->dst_sock_fd, info_send->buffer, sizeof(info_send->buffer), 0) == -1)
+    {
+        cout << "send message fail" << endl;
+        pthread_exit(0);
+    }
+    else
+    {
+        cout << "MESSAGE SEND TO " << (info_send->NO == 0 ? 1 : 0) << ": " << info_send->buffer << endl;
+    }
+
+    pthread_exit(0);
+}
+
 void *recv_func(void *arg)
 {
     INFO *info = (INFO *)arg;
@@ -278,10 +272,15 @@ void *recv_func(void *arg)
 
         if (recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
         {
-            cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer << endl;
-
             if ((strncmp(recv_buffer, "FTPoffline", 10) == 0) || (strncmp(recv_buffer, "FTPonline", 9)== 0))
             {
+                cout << "Receive FTP request." << endl;
+                
+                info_send.NO = info->NO;
+                info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
+                strcpy(info_send.buffer, recv_buffer);
+                send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
+
                 int cmd;
                 if(strncmp(recv_buffer, "FTPoffline", 10) == 0)
                 {
@@ -292,12 +291,15 @@ void *recv_func(void *arg)
                     cmd = 2;
                 }
                 int ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, &cmd);
+                ftp_result = pthread_join(ftp_thread, NULL);
                 continue;
             }
-            if (strncmp(recv_buffer, "quit", 4) == 0)
+            if (strncmp(recv_buffer, "QUIT", 4) == 0)
             {
                 break;
             }
+
+            cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer << endl;
 
             info_send.NO = info->NO;
             info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];

@@ -1,7 +1,8 @@
-//10.172.81.27 
 #define WIN32_LEAN_AND_MEAN
 #define DEFAULT_BUFLEN 1024
-#define DEFAULT_PORT "8000"
+#define DEFAULT_PORT 8000
+#define FTP_PORT 8006
+#define IP "192.168.1.113"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -27,8 +28,6 @@ void main_UI(SOCKET *soc);
 
 void login(SOCKET *soc)
 {
-    //check username and passwd
-
     system("cls");
 
     char username[20] = {0};
@@ -65,27 +64,26 @@ void login(SOCKET *soc)
 
 void ftp_send(SOCKET *soc)
 {
-    char ftp_req[50];
+    Sleep(50);
+    char ftpreq[50];
 
-    cout << "1.Offline" << endl;
-    cout << "2.Online" << endl;
+    // cout << "1.Offline" << endl;
+    // cout << "2.Online" << endl;
 
-    switch (getchar())
-    {
-        case ('1'):
-            strcpy(ftp_req, "ftpreqlixian");
-            send(*soc, ftp_req, (int)strlen(ftp_req), 0);
-            break;
-        case ('2'):
-            strcpy(ftp_req, "ftpreqzaixian");
-            send(*soc, ftp_req, (int)strlen(ftp_req), 0);
-            break;
-    }
-    cout << "Location: " << endl;
+    // switch (getchar())
+    // {
+    //     case ('1'):
+    //         strcpy(ftpreq, "FTPoffline");
+    //         send(*soc, ftpreq, (int)strlen(ftpreq), 0);
+    //         break;
+    //     case ('2'):
+    //         strcpy(ftpreq, "FTPonline");
+    //         send(*soc, ftpreq, (int)strlen(ftpreq), 0);
+    //         break;
+    // }
 
-    //char const *filename = "test"; //文件名
-
-    FILE *fp = fopen("D:\\Algorithm\\Network\\ChatRoom\\text.txt", "rb");
+    //cout << "Location: " << endl;
+    FILE *fp = fopen("D:\\Algorithm\\Network\\ChatRoom\\paper.txt", "rb");
 
     if (fp==NULL)
     {
@@ -99,57 +97,111 @@ void ftp_send(SOCKET *soc)
 
     int nCount;
     char sendbuf[DEFAULT_BUFLEN] = {0};
-    char ftpstart[] = "ftpstart";
-    send(*soc, ftpstart, (int)strlen(ftpstart), 0);
-    int test;
+    int send_ret;
+    int sum = 0;
+
     while ((nCount = fread(sendbuf, 1, DEFAULT_BUFLEN, fp)) > 0)
     {
-        //sendbuf[nCount] = '\0';
-        test = send(*soc, sendbuf, nCount, 0);
-        printf("%d\n", test);
+        send_ret = send(*soc, sendbuf, nCount, 0);
+        sum += send_ret;
+        cout << "send signal:" << send_ret << endl;
+        if(nCount<DEFAULT_BUFLEN)
+            break;
     }
+
+    cout << "sum bytes send: " << sum << endl;
     fclose(fp);
-    char fin[] = "ftpfin";
+
+    char fin[] = "FTPfin";
     Sleep(50);
-    test = send(*soc, fin, (int)strlen(fin), 0);
-    printf("%d", test);
-    printf("Done.");
+    send_ret = send(*soc, fin, (int)strlen(fin), 0);
+    cout << "send signal:" << send_ret << endl;
+
+    cout << "Done." << endl;
 }
 
 void ftp_recv(SOCKET *soc)
 {
-    char filename[100] = "recv.txt"; //文件名
+    cout << "ftp recv" << endl;
 
+    char filename[10] = "recv.txt"; //文件名
     FILE *fp = fopen(filename, "wb");  //以二进制方式打开（创建）文件
     char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
     int nCount;
-    while (1)
-    {
-        recv(*soc, buffer, DEFAULT_BUFLEN, 0);
-        if (strncmp(buffer, "ftpstart", 8) == 0)
-            break;
-    }
-    cout << "start";
+    int sum = 0;
+
     while (1)
     {
         nCount = recv(*soc, buffer, DEFAULT_BUFLEN, 0);
-        if (strncmp(buffer, "ftpfin", 6) == 0)
+        cout << "recv signal: " << nCount << endl;
+        if (strncmp(buffer, "FTPfin", 6) == 0)
             break;
         if (nCount > 0)
         {
             fwrite(buffer, nCount, 1, fp);
         }
+        sum += nCount;
     }
+
+    cout << "sum bytes recevice: " << sum << endl;
     fclose(fp);
-    //char success[] = "File transfer success!";
+    
     cout << "File transfer success!";
-    //send(*soc, success, sizeof(success), 0);
+}
+
+void *ftp_func(void *arg)
+{
+    int cmd = *(int *)arg;
+    WORD sockVersion = MAKEWORD(2, 2);
+    WSADATA data;
+
+    if (WSAStartup(sockVersion, &data) != 0)
+    {
+        pthread_exit(0);
+    }
+
+    SOCKET ftpsock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    if(ftpsock==INVALID_SOCKET)
+    {
+        cout << ("invalid socket!");
+        pthread_exit(0);
+    }
+
+    sockaddr_in serAddr;
+    serAddr.sin_family = AF_INET;
+    serAddr.sin_port = htons(FTP_PORT);
+    serAddr.sin_addr.S_un.S_addr = inet_addr(IP);
+
+    cout << "Connecting to ftp service." << endl;
+
+    if (connect(ftpsock, (sockaddr *)&serAddr, sizeof(serAddr)) == SOCKET_ERROR)
+    {
+        cout << "ftp_func Connect error." << endl;
+        closesocket(ftpsock);
+        pthread_exit(0);
+    }
+
+    if(cmd==0)
+    {
+        char signal[] = "I am sender.";
+        send(ftpsock, signal, (int)strlen(signal), 0);
+        ftp_send(&ftpsock);
+    }
+    else if (cmd==1)
+    {
+        char signal[]="I am receiver.";
+        send(ftpsock, signal, (int)strlen(signal), 0);
+        ftp_recv(&ftpsock);
+    }
+    
+    closesocket(ftpsock);
+    WSACleanup();
+    pthread_exit(0);
 }
 
 void *send_func(void *arg)
 {
-    //send thread's function
-
     char sendbuf[DEFAULT_BUFLEN];
     SOCKET send_sock = (SOCKET)arg;
 
@@ -165,12 +217,19 @@ void *send_func(void *arg)
                 break;
             if (strncmp(sendbuf, "FTP", 3) == 0)
             {
-                ftp_send(&send_sock);
+                char ftpreq[] = "FTPonline";
+                send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+                pthread_t ftp_thread;
+                int ftp_result;
+                int cmd = 0;
+                ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, (void *)&cmd);
+                ftp_result = pthread_join(ftp_thread, NULL);
+                cout << "Back to main thread." << endl;
                 continue;
             }
             if (send(send_sock, sendbuf, (int)strlen(sendbuf), 0) == -1)
             {
-                printf("-->Send failed with error: %d\n", WSAGetLastError());
+                printf("Send failed with error: %d\n", WSAGetLastError());
                 continue;
             }
         }
@@ -181,33 +240,35 @@ void *send_func(void *arg)
 
 void *recv_func(void *arg)
 {
-    //recv thread's function
-
-    SOCKET rece_sock = (SOCKET)arg;
-    int iResult;
+    SOCKET recv_sock = (SOCKET)arg;
+    int recv_ret;
     char recvbuf[DEFAULT_BUFLEN] = {0};
     int recvbuflen = DEFAULT_BUFLEN;
 
     do
     {
-        iResult = recv(rece_sock, recvbuf, recvbuflen, 0);
+        recv_ret= recv(recv_sock, recvbuf, recvbuflen, 0);
 
-        if (strncmp(recvbuf, "ftpreq", 6) == 0)
+        if (strncmp(recvbuf, "FTPonline", 6) == 0)
         {
-            ftp_recv(&rece_sock);
+            pthread_t ftp_thread;
+            int ftp_result;
+            int cmd = 1;
+            ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, (void *)&cmd);
+            ftp_result = pthread_join(ftp_thread, NULL);
             continue;
         }
 
-        if (iResult > 0)
+        if (recv_ret > 0)
         {
             cout << "RECV MESSAGE: " << recvbuf;
         }
-        else if (iResult == 0)
-            printf("Connection closed\n");
+        else if (recv_ret == 0)
+            printf("Connection closed.\n");
         else
             printf("recv failed with error: %d\n", WSAGetLastError());
 
-    } while (iResult > 0);
+    } while (recv_ret > 0);
 
     pthread_exit(0);
 }
@@ -245,85 +306,40 @@ void main_UI(SOCKET *soc)
     }
 }
 
-int __cdecl main(int argc, char **argv)
+int main()
 {
-    WSADATA wsaData;
-    SOCKET ConnectSocket = INVALID_SOCKET;
-    struct addrinfo *result = NULL,
-                    *ptr = NULL,
-                    hints;
-    int iResult;
-
-    if (argc != 2)
+    WORD sockVersion = MAKEWORD(2, 2);
+    WSADATA data;
+    if (WSAStartup(sockVersion, &data) != 0)
     {
-        printf("usage: %s server-name\n", argv[0]);
-        return 1;
+        return 0;
     }
 
-    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-
-    if (iResult != 0)
+    SOCKET sclient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(sclient==INVALID_SOCKET)
     {
-        printf("WSAStartup failed with error: %d\n", iResult);
-        return 1;
+        cout << ("invalid socket!");
+        return 0;
     }
 
-    ZeroMemory(&hints, sizeof(hints)); //用0来填充hints的内存
-    hints.ai_family = AF_UNSPEC;       //0，表示未指明是ipv4还是IPV6
-    hints.ai_socktype = SOCK_STREAM;   //1,表示scoket类型tcp
-    hints.ai_protocol = IPPROTO_TCP;   //6，表示数据传输类型
-
-    // Resolve the server address and port
-    iResult = getaddrinfo(argv[1], DEFAULT_PORT, &hints, &result); //8000
-    if (iResult != 0)
+    sockaddr_in serAddr;
+    serAddr.sin_family = AF_INET;
+    serAddr.sin_port = htons(DEFAULT_PORT);
+    serAddr.sin_addr.S_un.S_addr = inet_addr(IP);
+    if (connect(sclient, (sockaddr *)&serAddr, sizeof(serAddr)) == SOCKET_ERROR)
     {
-        printf("getaddrinfo failed with error: %d\n", iResult);
-        WSACleanup();
-        return 1;
+        cout << "Main Connect error." << endl;
+        closesocket(sclient);
+        return 0;
     }
 
-    // Attempt to connect to an address until one succeeds
-    for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
-    {
+    main_UI(&sclient);
 
-        // Create a SOCKET for connecting to server
-        ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-        if (ConnectSocket == INVALID_SOCKET)
-        {
-            printf("socket failed with error: %ld\n", WSAGetLastError());
-            WSACleanup();
-            return 1;
-        }
-
-        // Connect to server.
-        iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-        if (iResult == SOCKET_ERROR)
-        {
-            closesocket(ConnectSocket);
-            ConnectSocket = INVALID_SOCKET;
-            continue;
-        }
-        break;
-    }
-
-    freeaddrinfo(result);
-
-    if (ConnectSocket == INVALID_SOCKET)
-    {
-        printf("Unable to connect to server!\n");
-        WSACleanup();
-        return 1;
-    }
-
-    main_UI(&ConnectSocket);
-
-    pthread_t recv_p;
-    pthread_t send_p;
-
+    pthread_t recv_p, send_p;
     int send_result, recv_result;
 
-    send_result = pthread_create(&send_p, NULL, send_func, (void *)ConnectSocket);
-    recv_result = pthread_create(&recv_p, NULL, recv_func, (void *)ConnectSocket);
+    send_result = pthread_create(&send_p, NULL, send_func, (void *)sclient);
+    recv_result = pthread_create(&recv_p, NULL, recv_func, (void *)sclient);
 
     if (send_result != 0)
     {
@@ -342,7 +358,7 @@ int __cdecl main(int argc, char **argv)
     printf("SYSTEM: Chat over.\n");
 
     // cleanup
-    closesocket(ConnectSocket);
+    closesocket(sclient);
     WSACleanup();
     return 0;
 }
