@@ -26,6 +26,14 @@ void *send_func(void *arg);
 void *recv_func(void *arg);
 void main_UI(SOCKET *soc);
 
+struct  CMD
+{
+    //1:offline 2:online
+    int method;
+    //0:sender 1:receiver
+    int sender;
+};
+
 void login(SOCKET *soc)
 {
     system("cls");
@@ -134,7 +142,7 @@ void ftp_recv(SOCKET *soc)
 
 void *ftp_func(void *arg)
 {
-    int cmd = *(int *)arg;
+    CMD cmd = *(CMD *)arg;
     WORD sockVersion = MAKEWORD(2, 2);
     WSADATA data;
 
@@ -165,19 +173,32 @@ void *ftp_func(void *arg)
         pthread_exit(0);
     }
 
-    if(cmd==0)
+    if(cmd.method==1)
     {
-        char signal[] = "I am sender.";
-        send(ftpsock, signal, (int)strlen(signal), 0);
+        //offline
+
         ftp_send(&ftpsock);
     }
-    else if (cmd==1)
+    else if(cmd.method==2)
     {
-        char signal[]="I am receiver.";
-        send(ftpsock, signal, (int)strlen(signal), 0);
-        ftp_recv(&ftpsock);
+        //online
+
+        if(cmd.sender==0)
+        {
+            char signal[] = "I am sender.";
+            send(ftpsock, signal, (int)strlen(signal), 0);
+            cout << "ID send." << endl;
+            ftp_send(&ftpsock);
+        }
+        else if (cmd.sender==1)
+        {
+            char signal[]="I am receiver.";
+            send(ftpsock, signal, (int)strlen(signal), 0);
+            cout << "ID send." << endl;
+            ftp_recv(&ftpsock);
+        }
     }
-    
+
     closesocket(ftpsock);
     WSACleanup();
     pthread_exit(0);
@@ -200,6 +221,8 @@ void *send_func(void *arg)
                 break;
             if (strncmp(sendbuf, "FTP", 3) == 0)
             {
+                CMD cmd;
+                cmd.sender = 0;
                 char ftpreq[50];
                 strcpy(ftpreq, "FTP");
                 send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
@@ -210,10 +233,12 @@ void *send_func(void *arg)
                 switch (getchar())
                 {
                     case ('1'):
+                        cmd.method = 1;
                         strcpy(ftpreq, "offline");
                         send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
                         break;
                     case ('2'):
+                        cmd.method = 2;
                         strcpy(ftpreq, "online");
                         send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
                         break;
@@ -221,7 +246,6 @@ void *send_func(void *arg)
 
                 pthread_t ftp_thread;
                 int ftp_result;
-                int cmd = 0;
                 ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, (void *)&cmd);
                 ftp_result = pthread_join(ftp_thread, NULL);
                 cout << "Back to main thread." << endl;
@@ -253,7 +277,9 @@ void *recv_func(void *arg)
         {
             pthread_t ftp_thread;
             int ftp_result;
-            int cmd = 1;
+            CMD cmd;
+            cmd.method = 2;
+            cmd.sender = 1;
             ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, (void *)&cmd);
             ftp_result = pthread_join(ftp_thread, NULL);
             continue;

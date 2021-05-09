@@ -76,41 +76,67 @@ void ID_verify(int sock_fd)
 
 void ftp_offline(int sock_fd)
 {
-    char filename[100] = "test.mp4";  //文件名
-    FILE *fp = fopen(filename, "wb"); //以二进制方式打开（创建）文件
-    char buffer[MAX_BUFF_LEN] = {0};  //文件缓冲区
+    cout << "ftp recv" << endl;
+
+    char filename[10] = "recv.png"; //文件名
+    FILE *fp = fopen(filename, "wb");  //以二进制方式打开（创建）文件
+    char buffer[MAX_BUFF_LEN] = {0}; //文件缓冲区
     int nCount;
-    cout << "start1" << endl;
-    while (1)
-    {
-        recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
-        cout << buffer << endl;
-        if (strncmp(buffer, "ftpstart", 8) == 0)
-        {
-            cout << "strat2" << endl;
-            break;
-        }
-    }
-    cout << "start3" << endl;
+    int sum = 0;
+
     while (1)
     {
         nCount = recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
-        //cout<<nCount<<endl;
+        cout << "recv signal: " << nCount << endl;
         if (strncmp(buffer, "FTPfin", 6) == 0)
-        {
-            cout << "传输完毕" << endl;
             break;
-        }
-
         if (nCount > 0)
         {
             fwrite(buffer, nCount, 1, fp);
         }
+        sum += nCount;
     }
+
+    cout << "sum bytes received: " << sum << endl;
     fclose(fp);
-    char success[] = "File transfer success!";
-    cout << "File transfer success!" << endl;
-    send(sock_fd, success, sizeof(success), 0);
+    
+    cout << "File transfer success!";
+
+    // char filename[100] = "pic.png";  //文件名
+    // FILE *fp = fopen(filename, "wb"); //以二进制方式打开（创建）文件
+    // char buffer[MAX_BUFF_LEN] = {0};  //文件缓冲区
+    // int nCount;
+
+    // while (1)
+    // {
+    //     recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
+    //     cout << buffer << endl;
+    //     if (strncmp(buffer, "ftpstart", 8) == 0)
+    //     {
+    //         cout << "strat2" << endl;
+    //         break;
+    //     }
+    // }
+    // cout << "start3" << endl;
+    // while (1)
+    // {
+    //     nCount = recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
+    //     //cout<<nCount<<endl;
+    //     if (strncmp(buffer, "FTPfin", 6) == 0)
+    //     {
+    //         cout << "传输完毕" << endl;
+    //         break;
+    //     }
+
+    //     if (nCount > 0)
+    //     {
+    //         fwrite(buffer, nCount, 1, fp);
+    //     }
+    // }
+    // fclose(fp);
+    // char success[] = "File transfer success!";
+    // cout << "File transfer success!" << endl;
+    // send(sock_fd, success, sizeof(success), 0);
 }
 
 void ftp_online(int FTP_SEND)
@@ -162,12 +188,16 @@ void *waiting_func(void *arg)
 void *ftp_func(void *arg)
 {
     int cmd = *(int *)arg;
-    int link_num = 0;
+    
+    //1:offline 2:online
+
+    int max_link = (cmd == 1) ? 1 : 2;
+    int link_num;
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in client_addr[QUE_NUM];
-    INFO info[QUE_NUM];
+    struct sockaddr_in client_addr[max_link];
+    INFO info[max_link];
     pthread_t waiting_thread0, waiting_thread1;
-    int waiting_result[QUE_NUM];
+    int waiting_result[max_link];
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
@@ -181,7 +211,7 @@ void *ftp_func(void *arg)
         exit(1);
     }
 
-    if (listen(sock_fd, QUE_NUM) == -1)
+    if (listen(sock_fd, max_link) == -1)
     {
         cout << "ftp listen fail" << endl;
         exit(1);
@@ -189,7 +219,7 @@ void *ftp_func(void *arg)
 
     cout << "preparing for file transmission..." << endl;
 
-    for (link_num = 0; link_num < QUE_NUM;link_num++)
+    for (link_num = 0; link_num < max_link;link_num++)
     {
         socklen_t client_addr_size = sizeof(client_addr[link_num]);
         if ((ftp_fd[link_num] = accept(sock_fd, (struct sockaddr *)&client_addr[link_num], &client_addr_size)) == -1)
@@ -204,38 +234,34 @@ void *ftp_func(void *arg)
         info[link_num].NO = link_num;
     }
 
-    // for (int i = 0; i < QUE_NUM;i++)
-    // {
-    //     char signal[] = "file transmission ready.";
-    //     if (send(ftp_fd[i], signal, (int)strlen(signal), 0) == -1)
-    //     {
-    //         cout << "signal send failed." << endl;
-    //     }
-    // }
-
-    cout << "message sent." << endl;
-
-    waiting_result[0] = pthread_create(&waiting_thread0, NULL, waiting_func, &info[0]);
-    waiting_result[1] = pthread_create(&waiting_thread1, NULL, waiting_func, &info[1]);
-
-    waiting_result[0] = pthread_join(waiting_thread0, NULL);
-    waiting_result[1] = pthread_join(waiting_thread1, NULL);
-
-    cout << "Sender confirm." << endl;
-
     if (cmd == 1)
     {
         ftp_offline(info[sender].sock_fd);
     }
     else if (cmd == 2)
     {
+        cout << "waiting for ID" << endl;
+        waiting_result[0] = pthread_create(&waiting_thread0, NULL, waiting_func, &info[0]);
+        waiting_result[1] = pthread_create(&waiting_thread1, NULL, waiting_func, &info[1]);
+
+        waiting_result[0] = pthread_join(waiting_thread0, NULL);
+        waiting_result[1] = pthread_join(waiting_thread1, NULL);
+        cout << "Sender confirm." << endl;
+
         ftp_online(sender);
     }
 
     cout << "File transmission success!" << endl;
 
-    for (int i = 0; i < 2; i++)
-        close(ftp_fd[i]);
+    if(cmd==1)
+    {
+        close(ftp_fd[0]);
+    }
+    else if(cmd==2)
+    {
+        for (int i = 0; i < 2; i++)
+            close(ftp_fd[i]);
+    }
     close(sock_fd);
     pthread_exit(0);
 }
@@ -281,6 +307,7 @@ void *recv_func(void *arg)
                 {
                     if(strncmp(recv_buffer, "offline", 7) == 0)
                     {
+                        cout << "method: offline." << endl;
                         cmd = 1;
                     }
                     else if (strncmp(recv_buffer, "online", 6) == 0)
