@@ -2,7 +2,7 @@
 #define DEFAULT_BUFLEN 1024
 #define DEFAULT_PORT 8000
 #define FTP_PORT 8006
-#define IP "192.168.1.113"
+#define IP "10.172.81.27"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -65,25 +65,8 @@ void login(SOCKET *soc)
 void ftp_send(SOCKET *soc)
 {
     Sleep(50);
-    char ftpreq[50];
-
-    // cout << "1.Offline" << endl;
-    // cout << "2.Online" << endl;
-
-    // switch (getchar())
-    // {
-    //     case ('1'):
-    //         strcpy(ftpreq, "FTPoffline");
-    //         send(*soc, ftpreq, (int)strlen(ftpreq), 0);
-    //         break;
-    //     case ('2'):
-    //         strcpy(ftpreq, "FTPonline");
-    //         send(*soc, ftpreq, (int)strlen(ftpreq), 0);
-    //         break;
-    // }
-
     //cout << "Location: " << endl;
-    FILE *fp = fopen("D:\\Algorithm\\Network\\ChatRoom\\paper.txt", "rb");
+    FILE *fp = fopen("D:\\Algorithm\\Network\\ChatRoom\\pic.png", "rb");
 
     if (fp==NULL)
     {
@@ -124,7 +107,7 @@ void ftp_recv(SOCKET *soc)
 {
     cout << "ftp recv" << endl;
 
-    char filename[10] = "recv.txt"; //文件名
+    char filename[10] = "recv.png"; //文件名
     FILE *fp = fopen(filename, "wb");  //以二进制方式打开（创建）文件
     char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
     int nCount;
@@ -143,7 +126,7 @@ void ftp_recv(SOCKET *soc)
         sum += nCount;
     }
 
-    cout << "sum bytes recevice: " << sum << endl;
+    cout << "sum bytes received: " << sum << endl;
     fclose(fp);
     
     cout << "File transfer success!";
@@ -217,8 +200,25 @@ void *send_func(void *arg)
                 break;
             if (strncmp(sendbuf, "FTP", 3) == 0)
             {
-                char ftpreq[] = "FTPonline";
+                char ftpreq[50];
+                strcpy(ftpreq, "FTP");
                 send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+
+                cout << "1.Offline" << endl;
+                cout << "2.Online" << endl;
+
+                switch (getchar())
+                {
+                    case ('1'):
+                        strcpy(ftpreq, "offline");
+                        send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+                        break;
+                    case ('2'):
+                        strcpy(ftpreq, "online");
+                        send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+                        break;
+                }
+
                 pthread_t ftp_thread;
                 int ftp_result;
                 int cmd = 0;
@@ -249,7 +249,7 @@ void *recv_func(void *arg)
     {
         recv_ret= recv(recv_sock, recvbuf, recvbuflen, 0);
 
-        if (strncmp(recvbuf, "FTPonline", 6) == 0)
+        if (strncmp(recvbuf, "online", 6) == 0)
         {
             pthread_t ftp_thread;
             int ftp_result;

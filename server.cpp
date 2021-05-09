@@ -8,7 +8,7 @@
 #include <pthread.h> //g++ -pthread -o server server.cpp
 #include <string.h>
 
-#define IP "192.168.1.113" //服务器IP
+#define IP "10.172.81.27" //服务器IP
 #define PORT 8000           //服务器端口号
 #define ftp_PORT 8006       //文件传输端口号
 #define QUE_NUM 2           //最大连接数
@@ -272,23 +272,26 @@ void *recv_func(void *arg)
 
         if (recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
         {
-            if ((strncmp(recv_buffer, "FTPoffline", 10) == 0) || (strncmp(recv_buffer, "FTPonline", 9)== 0))
+            if (strncmp(recv_buffer, "FTP", 3) == 0)
             {
-                cout << "Receive FTP request." << endl;
-                
-                info_send.NO = info->NO;
-                info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
-                strcpy(info_send.buffer, recv_buffer);
-                send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
-
                 int cmd;
-                if(strncmp(recv_buffer, "FTPoffline", 10) == 0)
+                cout << "Receive FTP request." << endl;
+
+                if (recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
                 {
-                    cmd = 1;
-                }
-                else if (strncmp(recv_buffer, "FTPonline", 9) == 0)
-                {
-                    cmd = 2;
+                    if(strncmp(recv_buffer, "offline", 7) == 0)
+                    {
+                        cmd = 1;
+                    }
+                    else if (strncmp(recv_buffer, "online", 6) == 0)
+                    {
+                        cout << "method: online." << endl;
+                        cmd = 2;
+                        info_send.NO = info->NO;
+                        info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
+                        strcpy(info_send.buffer, recv_buffer);
+                        send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
+                    }
                 }
                 int ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, &cmd);
                 ftp_result = pthread_join(ftp_thread, NULL);
