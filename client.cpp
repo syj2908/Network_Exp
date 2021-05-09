@@ -2,7 +2,7 @@
 #define DEFAULT_BUFLEN 1024
 #define DEFAULT_PORT 8000
 #define FTP_PORT 8006
-#define IP "10.172.81.27"
+#define IP "192.168.140.128"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -73,8 +73,14 @@ void login(SOCKET *soc)
 void ftp_send(SOCKET *soc)
 {
     Sleep(50);
-    //cout << "Location: " << endl;
-    FILE *fp = fopen("D:\\Algorithm\\Network\\ChatRoom\\pic.png", "rb");
+
+    char pre[] = ".\\";
+    char pos[50] = {0};
+    
+    cout << "Location: " << endl;
+    cin >> pos;
+    strcat(pre, pos);
+    FILE *fp = fopen(pre, "rb");
 
     if (fp==NULL)
     {

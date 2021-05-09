@@ -8,7 +8,7 @@
 #include <pthread.h> //g++ -pthread -o server server.cpp
 #include <string.h>
 
-#define IP "10.172.81.27" //服务器IP
+#define IP "192.168.140.128" //服务器IP
 #define PORT 8000           //服务器端口号
 #define ftp_PORT 8006       //文件传输端口号
 #define QUE_NUM 2           //最大连接数
@@ -102,41 +102,6 @@ void ftp_offline(int sock_fd)
     
     cout << "File transfer success!";
 
-    // char filename[100] = "pic.png";  //文件名
-    // FILE *fp = fopen(filename, "wb"); //以二进制方式打开（创建）文件
-    // char buffer[MAX_BUFF_LEN] = {0};  //文件缓冲区
-    // int nCount;
-
-    // while (1)
-    // {
-    //     recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
-    //     cout << buffer << endl;
-    //     if (strncmp(buffer, "ftpstart", 8) == 0)
-    //     {
-    //         cout << "strat2" << endl;
-    //         break;
-    //     }
-    // }
-    // cout << "start3" << endl;
-    // while (1)
-    // {
-    //     nCount = recv(sock_fd, buffer, MAX_BUFF_LEN, 0);
-    //     //cout<<nCount<<endl;
-    //     if (strncmp(buffer, "FTPfin", 6) == 0)
-    //     {
-    //         cout << "传输完毕" << endl;
-    //         break;
-    //     }
-
-    //     if (nCount > 0)
-    //     {
-    //         fwrite(buffer, nCount, 1, fp);
-    //     }
-    // }
-    // fclose(fp);
-    // char success[] = "File transfer success!";
-    // cout << "File transfer success!" << endl;
-    // send(sock_fd, success, sizeof(success), 0);
 }
 
 void ftp_online(int FTP_SEND)
@@ -240,7 +205,7 @@ void *ftp_func(void *arg)
     }
     else if (cmd == 2)
     {
-        cout << "waiting for ID" << endl;
+        cout << "waiting for ID..." << endl;
         waiting_result[0] = pthread_create(&waiting_thread0, NULL, waiting_func, &info[0]);
         waiting_result[1] = pthread_create(&waiting_thread1, NULL, waiting_func, &info[1]);
 
@@ -319,6 +284,7 @@ void *recv_func(void *arg)
                         strcpy(info_send.buffer, recv_buffer);
                         send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
                     }
+                    memset(recv_buffer, '\0', sizeof(recv_buffer));
                 }
                 int ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, &cmd);
                 ftp_result = pthread_join(ftp_thread, NULL);
