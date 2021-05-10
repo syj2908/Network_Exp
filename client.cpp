@@ -19,21 +19,26 @@
 
 using namespace std;
 
-void login(SOCKET *soc);
-void ftp_send(SOCKET *soc);
-void ftp_recv(SOCKET *soc);
-void *send_func(void *arg);
-void *recv_func(void *arg);
-void main_UI(SOCKET *soc);
+long cur;
 
-struct  CMD
+struct CMD
 {
     //1:offline 2:online
     int method;
     //0:sender 1:receiver
     int sender;
+    //filename
+    char filename[20];
+    //cur
+    long cur;
 };
 
+void login(SOCKET *soc);
+void ftp_send(SOCKET *soc, CMD cmd);
+void ftp_recv(SOCKET *soc);
+void *send_func(void *arg);
+void *recv_func(void *arg);
+void main_UI(SOCKET *soc);
 void login(SOCKET *soc)
 {
     system("cls");
@@ -70,19 +75,16 @@ void login(SOCKET *soc)
     printf("Authentication succeeded, linked to ChatRoom.\n");
 }
 
-void ftp_send(SOCKET *soc)
+void ftp_send(SOCKET *soc, CMD cmd)
 {
     Sleep(50);
 
-    char pre[] = ".\\";
-    char pos[50] = {0};
-    
-    cout << "Location: " << endl;
-    cin >> pos;
-    strcat(pre, pos);
-    FILE *fp = fopen(pre, "rb");
+    char fname[30] = ".\\";
 
-    if (fp==NULL)
+    strcat(fname, cmd.filename);
+    FILE *fp = fopen(fname, "rb");
+
+    if (fp == NULL)
     {
         printf("ERROR: The file was not opened.\n");
         return;
@@ -97,12 +99,21 @@ void ftp_send(SOCKET *soc)
     int send_ret;
     int sum = 0;
 
+    if (cmd.method == 1)
+    {
+        fpos_t fcur;
+        fcur = cmd.cur;
+        fsetpos(fp, &fcur);
+    }
+
+    Sleep(50);
+
     while ((nCount = fread(sendbuf, 1, DEFAULT_BUFLEN, fp)) > 0)
     {
         send_ret = send(*soc, sendbuf, nCount, 0);
         sum += send_ret;
         cout << "send signal:" << send_ret << endl;
-        if(nCount<DEFAULT_BUFLEN)
+        if (nCount < DEFAULT_BUFLEN)
             break;
     }
 
@@ -121,7 +132,7 @@ void ftp_recv(SOCKET *soc)
 {
     cout << "ftp recv" << endl;
 
-    char filename[10] = "recv.png"; //文件名
+    char filename[10] = "recv.png";    //文件名
     FILE *fp = fopen(filename, "wb");  //以二进制方式打开（创建）文件
     char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
     int nCount;
@@ -142,7 +153,7 @@ void ftp_recv(SOCKET *soc)
 
     cout << "sum bytes received: " << sum << endl;
     fclose(fp);
-    
+
     cout << "File transfer success!";
 }
 
@@ -159,7 +170,7 @@ void *ftp_func(void *arg)
 
     SOCKET ftpsock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-    if(ftpsock==INVALID_SOCKET)
+    if (ftpsock == INVALID_SOCKET)
     {
         cout << ("invalid socket!");
         pthread_exit(0);
@@ -179,26 +190,26 @@ void *ftp_func(void *arg)
         pthread_exit(0);
     }
 
-    if(cmd.method==1)
+    if (cmd.method == 1)
     {
         //offline
 
-        ftp_send(&ftpsock);
+        ftp_send(&ftpsock, cmd);
     }
-    else if(cmd.method==2)
+    else if (cmd.method == 2)
     {
         //online
 
-        if(cmd.sender==0)
+        if (cmd.sender == 0)
         {
             char signal[] = "I am sender.";
             send(ftpsock, signal, (int)strlen(signal), 0);
             cout << "ID send." << endl;
-            ftp_send(&ftpsock);
+            ftp_send(&ftpsock, cmd);
         }
-        else if (cmd.sender==1)
+        else if (cmd.sender == 1)
         {
-            char signal[]="I am receiver.";
+            char signal[] = "I am receiver.";
             send(ftpsock, signal, (int)strlen(signal), 0);
             cout << "ID send." << endl;
             ftp_recv(&ftpsock);
@@ -238,16 +249,43 @@ void *send_func(void *arg)
 
                 switch (getchar())
                 {
-                    case ('1'):
-                        cmd.method = 1;
-                        strcpy(ftpreq, "offline");
-                        send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
-                        break;
-                    case ('2'):
-                        cmd.method = 2;
-                        strcpy(ftpreq, "online");
-                        send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
-                        break;
+                case ('1'):
+                {
+                    cmd.method = 1;
+                    strcpy(ftpreq, "offline");
+                    send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+
+                    char pos[50] = {0};
+                    cout << "Location: " << endl;
+                    cin >> pos;
+                    strcpy(cmd.filename, pos);
+
+                    if (send(send_sock, pos, (int)strlen(pos), 0) == -1)
+                    {
+                        cout << "send error." << endl;
+                    }
+                    cout << "send filename " << pos << endl;
+
+                    // char recvbuf[10] = {0};
+                    // if (recv(send_sock, recvbuf, (int)strlen(recvbuf), 0) == 0)
+                    // {
+                    //     cout << "Connection close" << endl;
+                    // }
+                    // cout << "recv cur " << recvbuf << endl;
+
+                    // long cur = atoi(recvbuf);
+                    Sleep(50);
+                    cmd.cur = cur;
+                    cout << "send_func cur: " << cmd.cur << endl;
+                    break;
+                }
+                case ('2'):
+                {
+                    cmd.method = 2;
+                    strcpy(ftpreq, "online");
+                    send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+                    break;
+                }
                 }
 
                 pthread_t ftp_thread;
@@ -277,7 +315,7 @@ void *recv_func(void *arg)
 
     do
     {
-        recv_ret= recv(recv_sock, recvbuf, recvbuflen, 0);
+        recv_ret = recv(recv_sock, recvbuf, recvbuflen, 0);
 
         if (strncmp(recvbuf, "online", 6) == 0)
         {
@@ -290,8 +328,13 @@ void *recv_func(void *arg)
             ftp_result = pthread_join(ftp_thread, NULL);
             continue;
         }
-
-        if (recv_ret > 0)
+        else if(strncmp(recvbuf,"cur:",4)==0)
+        {
+            char chcur[10] = {0};
+            strncpy(chcur, recvbuf + 4, 10);
+            cur = atol(chcur);
+        }
+        else if (recv_ret > 0)
         {
             cout << "RECV MESSAGE: " << recvbuf;
         }
@@ -348,7 +391,7 @@ int main()
     }
 
     SOCKET sclient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(sclient==INVALID_SOCKET)
+    if (sclient == INVALID_SOCKET)
     {
         cout << ("invalid socket!");
         return 0;
