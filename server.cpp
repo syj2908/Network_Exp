@@ -7,10 +7,12 @@
 #include <errno.h>
 #include <pthread.h> //g++ -pthread -o server server.cpp
 #include <string.h>
+#include <string>
 #include <stdio.h>
 #include <dirent.h>
+#include<fstream>
 
-#define IP "192.168.140.128" //服务器IP
+#define IP "172.16.250.40" //服务器IP
 #define PORT 8000            //服务器端口号
 #define ftp_PORT 8006        //文件传输端口号
 #define QUE_NUM 2            //最大连接数
@@ -58,29 +60,67 @@ char *format(char str[], int n)
     return str;
 }
 
-void ID_verify(int sock_fd)
+int ID_verify(int sock_fd)
 {
-    char Key[100] = {0};
-    char passwd[] = "syj 123";
-    char success[] = "1";
-    char fail[] = "-1";
-    while (1)
+    char signkind[5]={0};
+    recv(sock_fd, signkind, sizeof(signkind),0);
+    char signin[] = "1";
+    char signup[] = "2";
+    if(strcmp(signkind, signin) == 0)
     {
-        if (recv(sock_fd, Key, sizeof(Key), 0) > 0)
+        ifstream inFile("password.txt", ios::in);
+        if (!inFile) 
+        { //打开失败
+        cout << "error opening source file." << endl;
+            return 0;
+        }
+        char Key[100] = {0};
+        string passwd;
+        char success[] = "1";
+        char fail[] = "-1";
+        int  if_sign=0;
+        while (1)
         {
-            if (strcmp(Key, passwd) != 0)
+            if (recv(sock_fd, Key, sizeof(Key), 0) > 0)
             {
+                inFile.clear();
+                inFile.seekg(0,std::ios::beg);
+                while(!inFile.eof())
+                {
+                    getline(inFile,passwd);
+                    cout<<passwd<<endl;
+                    if (strcmp(Key, passwd.c_str()) == 0)
+                    {
+                        if_sign=1;
+                        cout << "User " << Key << " has login." << endl;
+                        send(sock_fd, success, (int)strlen(success), 0);
+                        break;
+                    }
+                    
+                }
+                if(if_sign==1)
+                    break;
                 format(Key, sizeof(Key));
+                //memset(passwd,'\0',sizeof(passwd));
                 cout << "User " << Key << " is trying to login." << endl;
                 send(sock_fd, fail, (int)strlen(fail), 0);
             }
-            else
-                break;
         }
+        inFile.close();
+        return 1;
     }
-
-    cout << "User " << Key << " has login." << endl;
-    send(sock_fd, success, (int)strlen(success), 0);
+    else if(strcmp(signkind, signup) == 0)
+    {
+        ofstream outFile("password.txt", ios::app); //以文本模式打开out.txt备写
+        outFile.seekp(0, ios::end);
+        char Key[100] = {0};
+        char success[] = "1";
+        recv(sock_fd, Key, sizeof(Key), 0);
+        outFile << Key << endl;
+        outFile.close();
+        send(sock_fd, success, (int)strlen(success), 0);
+        return 0;
+    }
 }
 
 void ftp_offline(int sock_fd, CMD cmd)
@@ -261,7 +301,10 @@ void *recv_func(void *arg)
     int send_result;
     INFO_SEND info_send;
 
-    ID_verify(conn_fd[info->NO]);
+    if(ID_verify(conn_fd[info->NO])==0)
+    {
+        ID_verify(conn_fd[info->NO]);
+    }
 
     while (1)
     {

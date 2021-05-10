@@ -2,7 +2,7 @@
 #define DEFAULT_BUFLEN 1024
 #define DEFAULT_PORT 8000
 #define FTP_PORT 8006
-#define IP "192.168.140.128"
+#define IP "172.16.250.40"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -34,15 +34,18 @@ struct CMD
 };
 
 void login(SOCKET *soc);
+void sign_up(SOCKET *soc);
 void ftp_send(SOCKET *soc, CMD cmd);
 void ftp_recv(SOCKET *soc);
 void *send_func(void *arg);
 void *recv_func(void *arg);
 void main_UI(SOCKET *soc);
+
 void login(SOCKET *soc)
 {
     system("cls");
-
+	char signin[] = "1";
+	send(*soc, signin, (int)strlen(signin), 0);
     char username[20] = {0};
     char passwd[20] = {0};
     char uname_pwd[50] = {0};
@@ -73,6 +76,45 @@ void login(SOCKET *soc)
         }
     }
     printf("Authentication succeeded, linked to ChatRoom.\n");
+}
+
+void sign_up(SOCKET *soc)
+{
+	system("cls");
+	
+	char signup[] = "2";
+	send(*soc, signup, (int)strlen(signup), 0);
+	char username[20] = {0};
+    char passwd[20] = {0};
+    char uname_pwd[50] = {0};
+    char space[] = " ";
+    char rec_log[10] = {0};
+
+    cout << "------------------------------------------------------------------------" << endl;
+
+    while (1)
+    {
+        printf("Please input your UserName: ");
+        cin.sync();
+        gets(username);
+        printf("Please input your PassWord: ");
+        cin.sync();
+        gets(passwd);
+
+        strcat(username, space);
+        strcat(username, passwd);
+        strcpy(uname_pwd, username);
+
+        send(*soc, uname_pwd, (int)strlen(uname_pwd), 0);
+        recv(*soc, rec_log, 10, 0);
+
+        if (strncmp(rec_log, "1", 1) == 0)
+        {
+            break;
+        }
+    }
+    printf("The account registration is successful. Please log in again.\n");
+    Sleep(3000);
 }
 
 void ftp_send(SOCKET *soc, CMD cmd)
@@ -369,6 +411,8 @@ void main_UI(SOCKET *soc)
             login(soc);
             break;
         case ('2'):
+            sign_up(soc);
+        	login(soc);
             break;
         default:
             system("cls");
