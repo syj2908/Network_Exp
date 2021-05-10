@@ -105,9 +105,9 @@ void ftp_offline(int sock_fd, CMD cmd)
     cout << "sum bytes received: " << sum << endl;
     fclose(fp);
 
-    char newname[MAX_BUFF_LEN];
+    char newname[MAX_BUFF_LEN]="./Downloads/";
     int len = strlen(cmd.filename);
-    strncpy(newname, cmd.filename, len - 4);
+    strncat(newname, cmd.filename, len - 4);
     rename(cmd.filename, newname);
 }
 
@@ -290,7 +290,7 @@ void *recv_func(void *arg)
 
                             struct dirent *ptr;
                             DIR *dir;
-                            dir = opendir("./");
+                            dir = opendir("./Downloads");
 
                             while ((ptr = readdir(dir)) != NULL)
                             {
@@ -320,6 +320,13 @@ void *recv_func(void *arg)
                             strcat(sendbuffer, chcur);
 
                             send(info->sock_fd, sendbuffer, (int)strlen(sendbuffer), 0);
+
+                            info_send.NO = info->NO;
+                            info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
+                            char ftpsignal[] = "You have a file ready to accept, type \"FILELIST\" to figure out!\n";
+                            strcpy(info_send.buffer, ftpsignal);
+
+                            send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
                         }
                     }
                     else if (strncmp(recv_buffer, "online", 6) == 0)
@@ -337,20 +344,52 @@ void *recv_func(void *arg)
                 ftp_result = pthread_join(ftp_thread, NULL);
                 continue;
             }
-            if (strncmp(recv_buffer, "QUIT", 4) == 0)
+            else if (strncmp(recv_buffer, "FILELIST", 8) == 0)
+            {
+                struct dirent *ptr;
+                DIR *dir;
+                dir = opendir("./Downloads");
+
+                info_send.NO = info->NO;
+                info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[0] : conn_fd[1];
+                char filelist[] = "******File List******\n";
+                strcpy(info_send.buffer, filelist);
+                send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
+                send_result = pthread_join(send_thread, NULL);
+                while ((ptr = readdir(dir)) != NULL)
+                {
+                    //跳过'.'和'..'两个目录
+                    if (ptr->d_name[0] == '.')
+                        continue;
+                    char filename[30] = "-->";
+                    strcat(filename, ptr->d_name);
+                    strcat(filename, "\n");
+                    strcpy(info_send.buffer, filename);
+                    send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
+                    send_result = pthread_join(send_thread, NULL);
+                }
+                closedir(dir);
+            }
+            else if(strncmp(recv_buffer, "GET", 3) == 0)
+            {
+                
+            }
+            else if (strncmp(recv_buffer, "QUIT", 4) == 0)
             {
                 break;
             }
+            else
+            {
+                cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer << endl;
 
-            cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer << endl;
+                info_send.NO = info->NO;
+                info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
+                strcpy(info_send.buffer, recv_buffer);
 
-            info_send.NO = info->NO;
-            info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
-            strcpy(info_send.buffer, recv_buffer);
-
-            send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
+                send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
+            }
         }
-        send_result = pthread_join(send_thread, NULL);
+        // send_result = pthread_join(send_thread, NULL);
     }
 }
 
