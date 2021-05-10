@@ -83,10 +83,10 @@ void ID_verify(int sock_fd)
     send(sock_fd, success, (int)strlen(success), 0);
 }
 
-void ftp_offline(int sock_fd,CMD cmd)
+void ftp_offline(int sock_fd, CMD cmd)
 {
     FILE *fp = fopen(cmd.filename, "ab"); //以二进制方式打开（创建）文件，指针自动定位到文件末尾
-    char buffer[MAX_BUFF_LEN] = {0};  //文件缓冲区
+    char buffer[MAX_BUFF_LEN] = {0};      //文件缓冲区
     int nCount;
     int sum = 0;
 
@@ -102,9 +102,13 @@ void ftp_offline(int sock_fd,CMD cmd)
         }
         sum += nCount;
     }
-
     cout << "sum bytes received: " << sum << endl;
     fclose(fp);
+
+    char newname[MAX_BUFF_LEN];
+    int len = strlen(cmd.filename);
+    strncpy(newname, cmd.filename, len - 4);
+    rename(cmd.filename, newname);
 }
 
 void ftp_online(int FTP_SEND)
@@ -309,11 +313,12 @@ void *recv_func(void *arg)
                             closedir(dir);
 
                             cout << "cur: " << cur << endl;
-                            char sendbuffer[10] = {0};
-                            sprintf(sendbuffer, "%ld", cur);
-                            cout << "send cur: " << sendbuffer << endl;
+                            char chcur[10] = {0};
+                            sprintf(chcur, "%ld", cur);
+                            cout << "send cur: " << chcur << endl;
+                            char sendbuffer[20] = "cur:";
+                            strcat(sendbuffer, chcur);
 
-                            
                             send(info->sock_fd, sendbuffer, (int)strlen(sendbuffer), 0);
                         }
                     }
