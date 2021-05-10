@@ -22,6 +22,8 @@ int sender;           //文件发送方info->NO
 
 using namespace std;
 
+long cur;
+
 struct INFO
 {
     //传递给常驻recv线程的所有参数
@@ -39,7 +41,7 @@ struct INFO_SEND
 
 struct CMD
 {
-    //1:offline 2:online
+    //0:offline_send 1:offline_recv 2:online
     int method;
     char filename[MAX_BUFF_LEN + 4];
 };
@@ -83,7 +85,7 @@ void ID_verify(int sock_fd)
     send(sock_fd, success, (int)strlen(success), 0);
 }
 
-void ftp_offline(int sock_fd, CMD cmd)
+void ftp_offline_recv(int sock_fd, CMD cmd)
 {
     FILE *fp = fopen(cmd.filename, "ab"); //以二进制方式打开（创建）文件，指针自动定位到文件末尾
     char buffer[MAX_BUFF_LEN] = {0};      //文件缓冲区
@@ -105,10 +107,64 @@ void ftp_offline(int sock_fd, CMD cmd)
     cout << "sum bytes received: " << sum << endl;
     fclose(fp);
 
-    char newname[MAX_BUFF_LEN]="./Downloads/";
+    char newname[MAX_BUFF_LEN] = "./Downloads/";
     int len = strlen(cmd.filename);
     strncat(newname, cmd.filename, len - 4);
     rename(cmd.filename, newname);
+}
+
+void ftp_offline_send(int sock_fd, CMD cmd)
+{
+    sleep(1);
+    cout << "cmd.filename= " << cmd.filename << endl;
+    char path[MAX_BUFF_LEN] = "./Downloads/";
+    strcat(path, cmd.filename);
+    format(path, sizeof(path));
+    cout << "full name= " << path << endl;
+    FILE *fp = fopen(path, "rb");
+
+    if (fp == NULL)
+    {
+        printf("ERROR: The file was not opened.\n");
+        cout <<"errno: "<< errno << endl;
+    }
+    else
+    {
+        printf("Opening file...\n");
+    }
+
+    int nCount;
+    char sendbuf[MAX_BUFF_LEN] = {0};
+    int send_ret;
+    int sum = 0;
+
+    fpos_t fcur;
+    fcur.__pos = cur;
+    fsetpos(fp, &fcur);
+
+    cout << "cur: " << cur << endl;
+
+    sleep(1);
+
+    while ((nCount = fread(sendbuf, 1, MAX_BUFF_LEN, fp)) > 0)
+    {
+        send_ret = send(sock_fd, sendbuf, nCount, 0);
+        usleep(50);
+        sum += send_ret;
+        cout << "send signal:" << send_ret << endl;
+        if (nCount < MAX_BUFF_LEN)
+            break;
+    }
+
+    cout << "sum bytes send: " << sum << endl;
+    fclose(fp);
+
+    char fin[] = "FTPfin";
+    sleep(1);
+    send_ret = send(sock_fd, fin, (int)strlen(fin), 0);
+    cout << "send signal:" << send_ret << endl;
+
+    cout << "Done." << endl;
 }
 
 void ftp_online(int FTP_SEND)
@@ -160,7 +216,7 @@ void *ftp_func(void *arg)
 
     //1:offline 2:online
 
-    int max_link = (cmd.method == 1) ? 1 : 2;
+    int max_link = (cmd.method == 1 || cmd.method == 0) ? 1 : 2;
     int link_num;
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in client_addr[max_link];
@@ -203,10 +259,15 @@ void *ftp_func(void *arg)
         info[link_num].NO = link_num;
     }
 
-    if (cmd.method == 1)
+    if (cmd.method == 0)
     {
-        cout << "offline function." << endl;
-        ftp_offline(ftp_fd[0], cmd);
+        cout << "offline_send function." << endl;
+        ftp_offline_send(ftp_fd[0], cmd);
+    }
+    else if (cmd.method == 1)
+    {
+        cout << "offline_recv function." << endl;
+        ftp_offline_recv(ftp_fd[0], cmd);
     }
     else if (cmd.method == 2)
     {
@@ -338,7 +399,7 @@ void *recv_func(void *arg)
                         strcpy(info_send.buffer, recv_buffer);
                         send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
                     }
-                    memset(recv_buffer, '\0', sizeof(recv_buffer));
+                    // memset(recv_buffer, '\0', sizeof(recv_buffer));
                 }
                 int ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, &cmd);
                 ftp_result = pthread_join(ftp_thread, NULL);
@@ -361,7 +422,7 @@ void *recv_func(void *arg)
                     //跳过'.'和'..'两个目录
                     if (ptr->d_name[0] == '.')
                         continue;
-                    char filename[30] = "-->";
+                    char filename[MAX_BUFF_LEN] = "-->";
                     strcat(filename, ptr->d_name);
                     strcat(filename, "\n");
                     strcpy(info_send.buffer, filename);
@@ -370,9 +431,23 @@ void *recv_func(void *arg)
                 }
                 closedir(dir);
             }
-            else if(strncmp(recv_buffer, "GET", 3) == 0)
+            else if (strncmp(recv_buffer, "GET ", 4) == 0)
             {
-                
+                CMD cmd;
+                cmd.method = 0;
+                strcat(cmd.filename, recv_buffer + 4);
+                cout << "Receive FTP_GET request, filename= " << cmd.filename << endl;
+
+                if (recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
+                {
+                    char chcur[10] = {0};
+                    strncpy(chcur, recv_buffer + 4, 10);
+                    cur = atol(chcur);
+                    cout << "cur: " << cur << endl;
+                    int ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, &cmd);
+                    ftp_result = pthread_join(ftp_thread, NULL);
+                    cout << "ftp_thread exit." << endl;
+                }
             }
             else if (strncmp(recv_buffer, "QUIT", 4) == 0)
             {
@@ -389,7 +464,6 @@ void *recv_func(void *arg)
                 send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
             }
         }
-        // send_result = pthread_join(send_thread, NULL);
     }
 }
 

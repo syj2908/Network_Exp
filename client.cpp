@@ -12,6 +12,9 @@
 #include <pthread.h>
 #include <iostream>
 #include <string.h>
+#include <direct.h>
+#include <io.h>
+#include <vector>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Mswsock.lib")
 #pragma comment(lib, "AdvApi32.lib")
@@ -35,10 +38,48 @@ struct CMD
 
 void login(SOCKET *soc);
 void ftp_send(SOCKET *soc, CMD cmd);
-void ftp_recv(SOCKET *soc);
+void ftp_recv(SOCKET *soc, CMD cmd);
 void *send_func(void *arg);
 void *recv_func(void *arg);
 void main_UI(SOCKET *soc);
+
+char *format(char str[], int n)
+{
+    //删除fgets得到的字符串的末尾换行符
+
+    for (int i = 0; i < n; i++)
+    {
+        if (str[i] == '\n')
+        {
+            str[i] = '\0';
+        }
+    }
+    return str;
+}
+
+vector<string> getFiles(string cate_dir)
+{
+    vector<string> files; //存放文件名
+    _finddata_t file;
+    long lf = _findfirst(cate_dir.c_str(), &file);
+
+    if (lf == -1)
+    {
+        cout << cate_dir << " not found!!!" << endl;
+    }
+    else
+    {
+        while (_findnext(lf, &file) == 0)
+        {
+            if (strcmp(file.name, ".") == 0 || strcmp(file.name, "..") == 0)
+                continue;
+            files.push_back(file.name);
+        }
+    }
+    _findclose(lf);
+    return files;
+}
+
 void login(SOCKET *soc)
 {
     system("cls");
@@ -111,6 +152,7 @@ void ftp_send(SOCKET *soc, CMD cmd)
     while ((nCount = fread(sendbuf, 1, DEFAULT_BUFLEN, fp)) > 0)
     {
         send_ret = send(*soc, sendbuf, nCount, 0);
+        Sleep(5);
         sum += send_ret;
         cout << "send signal:" << send_ret << endl;
         if (nCount < DEFAULT_BUFLEN)
@@ -128,13 +170,12 @@ void ftp_send(SOCKET *soc, CMD cmd)
     cout << "Done." << endl;
 }
 
-void ftp_recv(SOCKET *soc)
+void ftp_recv(SOCKET *soc, CMD cmd)
 {
     cout << "ftp recv" << endl;
-
-    char filename[10] = "recv.png";    //文件名
-    FILE *fp = fopen(filename, "wb");  //以二进制方式打开（创建）文件
-    char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
+    cout << "cmd.filename: " << cmd.filename << endl;
+    FILE *fp = fopen(cmd.filename, "ab"); //以二进制方式打开（创建）文件
+    char buffer[DEFAULT_BUFLEN] = {0};    //文件缓冲区
     int nCount;
     int sum = 0;
 
@@ -154,7 +195,18 @@ void ftp_recv(SOCKET *soc)
     cout << "sum bytes received: " << sum << endl;
     fclose(fp);
 
-    cout << "File transfer success!";
+    char newname[DEFAULT_BUFLEN] = {0};
+    int len = strlen(cmd.filename);
+    strncat(newname, cmd.filename, len - 4);
+    cout << "cmd.filename=" << cmd.filename << endl;
+    cout << "newname=" << newname << endl;
+    int re_ret = rename(cmd.filename, newname);
+    if (re_ret != 0)
+    {
+        cout << "re_ret=" << re_ret << endl;
+        cout << errno << endl;
+    }
+    cout << "File transfer success!" << endl;
 }
 
 void *ftp_func(void *arg)
@@ -193,8 +245,14 @@ void *ftp_func(void *arg)
     if (cmd.method == 1)
     {
         //offline
-
-        ftp_send(&ftpsock, cmd);
+        if (cmd.sender == 0)
+        {
+            ftp_send(&ftpsock, cmd);
+        }
+        else if (cmd.sender == 1)
+        {
+            ftp_recv(&ftpsock, cmd);
+        }
     }
     else if (cmd.method == 2)
     {
@@ -212,7 +270,7 @@ void *ftp_func(void *arg)
             char signal[] = "I am receiver.";
             send(ftpsock, signal, (int)strlen(signal), 0);
             cout << "ID send." << endl;
-            ftp_recv(&ftpsock);
+            ftp_recv(&ftpsock, cmd);
         }
     }
 
@@ -235,8 +293,10 @@ void *send_func(void *arg)
         else
         {
             if (strncmp(sendbuf, "QUIT", 4) == 0)
+            {
                 break;
-            if (strncmp(sendbuf, "FTP", 3) == 0)
+            }
+            else if (strncmp(sendbuf, "FTP", 3) == 0)
             {
                 CMD cmd;
                 cmd.sender = 0;
@@ -254,6 +314,7 @@ void *send_func(void *arg)
                     cmd.method = 1;
                     strcpy(ftpreq, "offline");
                     send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+                    Sleep(50);
 
                     char pos[50] = {0};
                     cout << "Location: " << endl;
@@ -266,14 +327,6 @@ void *send_func(void *arg)
                     }
                     cout << "send filename " << pos << endl;
 
-                    // char recvbuf[10] = {0};
-                    // if (recv(send_sock, recvbuf, (int)strlen(recvbuf), 0) == 0)
-                    // {
-                    //     cout << "Connection close" << endl;
-                    // }
-                    // cout << "recv cur " << recvbuf << endl;
-
-                    // long cur = atoi(recvbuf);
                     Sleep(50);
                     cmd.cur = cur;
                     cout << "send_func cur: " << cmd.cur << endl;
@@ -300,9 +353,58 @@ void *send_func(void *arg)
                 printf("Send failed with error: %d\n", WSAGetLastError());
                 continue;
             }
+            if (strncmp(sendbuf, "GET ", 4) == 0)
+            {
+                CMD cmd;
+                cmd.method = 1;
+                cmd.sender = 1;
+                char filename[DEFAULT_BUFLEN];
+                format(sendbuf, sizeof(sendbuf));
+                strcpy(filename, sendbuf + 4);
+                strcat(filename, ".tmp");
+                strcpy(cmd.filename, filename);
+                char all_filename[DEFAULT_BUFLEN];
+
+                char current_address[DEFAULT_BUFLEN];
+                memset(current_address, 0, DEFAULT_BUFLEN);
+                getcwd(current_address, DEFAULT_BUFLEN);
+                strcat(current_address, "\\*");
+
+                vector<string> files = getFiles((string)current_address);
+
+                for (int i = 0; i < files.size(); i++)
+                {
+                    strcpy(all_filename, files[i].c_str());
+                    if (strcmp(filename, all_filename) == 0)
+                    {
+                        //temp file exist
+                        FILE *pFile;
+                        char filepath[] = "./";
+                        strcat(filepath, filename);
+                        pFile = fopen(filepath, "rb");
+                        fseek(pFile, 0, SEEK_END);
+                        cmd.cur = ftell(pFile);
+                        break;
+                    }
+                }
+
+                cout << "cur: " << cmd.cur << endl;
+                char chcur[10] = {0};
+                sprintf(chcur, "%ld", cmd.cur);
+                cout << "send cur: " << chcur << endl;
+                char sendbuffer[20] = "cur:";
+                strcat(sendbuffer, chcur);
+                Sleep(50);
+                send(send_sock, sendbuffer, (int)strlen(sendbuffer), 0);
+
+                pthread_t ftp_thread;
+                int ftp_result;
+                ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, (void *)&cmd);
+                ftp_result = pthread_join(ftp_thread, NULL);
+                continue;
+            }
         }
     }
-
     pthread_exit(0);
 }
 
@@ -328,7 +430,7 @@ void *recv_func(void *arg)
             ftp_result = pthread_join(ftp_thread, NULL);
             continue;
         }
-        else if(strncmp(recvbuf,"cur:",4)==0)
+        else if (strncmp(recvbuf, "cur:", 4) == 0)
         {
             char chcur[10] = {0};
             strncpy(chcur, recvbuf + 4, 10);
