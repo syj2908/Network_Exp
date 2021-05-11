@@ -5,7 +5,6 @@
 #define VOICE_PORT 8088
 #define DATASIZE 800 //分次截取数据大小
 #define IP "172.16.250.40"
-
 //#define IP "124.71.224.149"
 
 #include <windows.h>
@@ -21,7 +20,6 @@
 #include <vector>
 #include <mmeapi.h>
 #include <conio.h>
-
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Mswsock.lib")
 #pragma comment(lib, "AdvApi32.lib")
@@ -44,6 +42,9 @@ int bufsize = 800;
 HWAVEOUT hwo;
 int nAudioOut;
 int nReceive;
+WAVEHDR pWaveHdrOut[8];
+char *outBuffer[8];
+
 long cur;
 
 struct CAudioOutData //队列结构，用来存储网络中接收到的音频数据
@@ -153,7 +154,6 @@ void login(SOCKET *soc)
     }
     printf("Authentication succeeded, linked to ChatRoom.\n");
 }
-
 void sign_up(SOCKET *soc)
 {
     system("cls");
@@ -171,7 +171,11 @@ void sign_up(SOCKET *soc)
     while (1)
     {
         printf("Please input your UserName: ");
-        cin.sync();
+        while (_kbhit())
+        {
+            getch();
+        }
+        rewind(stdin);
         gets_s(username);
         printf("Please input your PassWord: ");
         cin.sync();
@@ -377,6 +381,7 @@ void CALLBACK waveInProc(HWAVEIN hWave, UINT uMsg, DWORD dwInstance, DWORD dw1, 
     {
         waveInUnprepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));
         waveInUnprepareHeader(hWaveIn, &wHdr2, sizeof(WAVEHDR));
+        break;
     }
     }
 }
@@ -403,17 +408,28 @@ void CALLBACK WaveCallback(HWAVEOUT hWave, UINT uMsg, DWORD dwInstance, DWORD dw
             nAudioOut = 0;
         }
         cout << nAudioOut << nReceive << endl;
+        break;
     }
-        //case WOM_CLOSE:
-        //{
-        //    LPWAVEHDR pWaveHeader = (LPWAVEHDR)dw1;
-        //    waveOutUnprepareHeader(hwo, pWaveHeader, sizeof(WAVEHDR));
-        //    free(pWaveHeader);
-        //    pWaveHeader = NULL;
-        //}
+    case WOM_CLOSE:
+    {
+        for (int i = 0; i < 8; i++) // 释放资源
+        {
+            waveOutUnprepareHeader(hwo, &(pWaveHdrOut[i]), sizeof(WAVEHDR));
+            if (&pWaveHdrOut[i])
+            {
+                free(&pWaveHdrOut[i]);
+
+                //pWaveHdrOut[i] = NULL;
+            }
+            if (outBuffer[i])
+            {
+                free(outBuffer[i]);
+                outBuffer[i] = NULL;
+            }
+        }
+    }
     }
 }
-
 void *voice_send_func(void *arg)
 {
 
@@ -458,7 +474,7 @@ void *voice_send_func(void *arg)
 
     waveInStart(hWaveIn); //开始录音
     cout << "test" << endl;
-    //waveInReset(hWaveIn);//停止录音
+
     while (1)
     {
         if (_kbhit() && _getch() == 0x1b)
@@ -467,6 +483,7 @@ void *voice_send_func(void *arg)
             break;
         }
     }
+    waveInReset(hWaveIn); //停止录音
     delete pBuffer1;
     delete pBuffer2;
 
@@ -475,7 +492,6 @@ void *voice_send_func(void *arg)
     pthread_exit(0);
     return 0;
 }
-
 void *voice_recv_func(void *arg)
 {
     for (int i = 0; i <= 49; i++)
@@ -518,7 +534,7 @@ void *vout(void *arg)
 {
 
     WAVEFORMATEX wfx;
-    WAVEHDR pWaveHdrOut[8];
+
     //fopen_s(&pcmfile, "test1.pcm", "wb");//打开文件
 
     wfx.wFormatTag = WAVE_FORMAT_PCM; //设置波形声音的格式
@@ -532,7 +548,7 @@ void *vout(void *arg)
     waveOutOpen(&hwo, WAVE_MAPPER, &wfx, (DWORD)WaveCallback, NULL, CALLBACK_FUNCTION); //打开一个给定的波形音频输出装置来进行声音播放
 
     int BufferNum = 8;
-    char *outBuffer[8];
+
     for (int i = 0; i < BufferNum; i++)
     {
         outBuffer[i] = new char[DATASIZE];
@@ -572,6 +588,8 @@ void *vout(void *arg)
             break;
         }
     }
+    waveOutReset(hwo);
+    waveOutClose(hwo);
     pthread_exit(0);
     return 0;
 }
@@ -637,7 +655,6 @@ void *voice_func(void *arg)
     pthread_exit(0);
     return 0;
 }
-
 void *send_func(void *arg)
 {
     char sendbuf[DEFAULT_BUFLEN];
