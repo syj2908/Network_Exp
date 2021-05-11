@@ -251,7 +251,7 @@ void ftp_recv(SOCKET *soc, CMD cmd)
 {
     cout << "ftp recv" << endl;
     cout << "cmd.filename: " << cmd.filename << endl;
-    FILE *fp = fopen(cmd.filename, "ab"); //以二进制方式打开（创建）文件
+    FILE *fp = fopen(cmd.filename, "wb"); //以二进制方式打开（创建）文件
     char buffer[DEFAULT_BUFLEN] = {0};    //文件缓冲区
     int nCount;
     int sum = 0;
