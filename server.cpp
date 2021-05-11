@@ -28,9 +28,7 @@ int sender;           //文件发送方info->NO
 using namespace std;
 
 long cur;
-
 void *recv_func(void *arg);
-
 struct INFO
 {
     //传递给常驻recv线程的所有参数
@@ -133,7 +131,10 @@ int ID_verify(int sock_fd)
 
 void ftp_offline_recv(int sock_fd, CMD cmd)
 {
-    FILE *fp = fopen(cmd.filename, "ab"); //以二进制方式打开（创建）文件，指针自动定位到文件末尾
+    char path[MAX_BUFF_LEN] = "./Downloads/";
+    strcat(path, cmd.filename);
+    format(path, sizeof(path));
+    FILE *fp = fopen(path, "ab"); //以二进制方式打开（创建）文件，指针自动定位到文件末尾
     char buffer[MAX_BUFF_LEN] = {0};      //文件缓冲区
     int nCount;
     int sum = 0;
@@ -148,6 +149,8 @@ void ftp_offline_recv(int sock_fd, CMD cmd)
         {
             fwrite(buffer, nCount, 1, fp);
         }
+        else
+            break;
         sum += nCount;
     }
     cout << "sum bytes received: " << sum << endl;
@@ -369,9 +372,9 @@ void *voice_recv_func(void *arg)
         int num=recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) ;
         if (num> 0)
         {
-            cout<<"收到"<<num<<endl;
-            if (strncmp(recv_buffer, "quit", 4) == 0)
-                break;
+            cout<<"voice recive"<<num<<endl;
+            //if (strncmp(recv_buffer, "quit", 4) == 0)
+                //break;
             info_send.num_send=num;
             info_send.NO = info->NO;
             info_send.dst_sock_fd = (info->NO == 0) ? voice_fd[1] : voice_fd[0];
@@ -542,7 +545,9 @@ void *recv_func(void *arg)
                                 {
                                     //temp file exist
                                     FILE *pFile;
-                                    char filepath[] = "./";
+                                    char filepath[] = "./Downloads/";
+                                    //char filepathtem[]="/" ;
+                                    //strcat(filepath, );
                                     strcat(filepath, ptr->d_name);
                                     pFile = fopen(filepath, "rb");
                                     fseek(pFile, 0, SEEK_END);
@@ -655,7 +660,6 @@ void *recv_func(void *arg)
                 info_send.NO = info->NO;
                 info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
                 memcpy(info_send.buffer, recv_buffer,recv_num);
-
                 send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
             }
         }
