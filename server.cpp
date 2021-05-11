@@ -28,7 +28,9 @@ int sender;           //文件发送方info->NO
 using namespace std;
 
 long cur;
+
 void *recv_func(void *arg);
+
 struct INFO
 {
     //传递给常驻recv线程的所有参数
@@ -653,6 +655,7 @@ void *recv_func(void *arg)
                 info_send.NO = info->NO;
                 info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
                 memcpy(info_send.buffer, recv_buffer,recv_num);
+
                 send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
             }
         }

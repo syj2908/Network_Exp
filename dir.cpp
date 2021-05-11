@@ -8,12 +8,7 @@ int main(int argc, char * argv[])
 {
     struct dirent *ptr;    
     DIR *dir;
-    dir=opendir("./");
-
-    int cur = 0;
-
-    char filename[20] = "pic.png";
-    strcat(filename, ".tmp");
+    dir=opendir("./Downloads");
 
     while((ptr=readdir(dir))!=NULL)
     {
@@ -21,19 +16,8 @@ int main(int argc, char * argv[])
         //跳过'.'和'..'两个目录
         if(ptr->d_name[0] == '.')
             continue;
-        // printf("%s\n",ptr->d_name);
-        if(strcmp(ptr->d_name, filename) == 0)
-        {
-            FILE *pFile;
-            char filepath[] = "./";
-            strcat(filepath, ptr->d_name);
-            pFile = fopen(filepath, "rb");
-            fseek(pFile, 0, SEEK_END);
-            cur = ftell(pFile);
-            break;
-        }
+        printf("%s\n",ptr->d_name);
     }
-    cout << "cur: " << cur << endl;
     closedir(dir);
     return 0;
 }
