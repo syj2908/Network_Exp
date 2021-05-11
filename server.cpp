@@ -342,6 +342,7 @@ void *ftp_func(void *arg)
     close(sock_fd);
     pthread_exit(0);
 }
+
 void *voice_send_func(void *arg)
 {
     INFO_SEND *info_send = (INFO_SEND *)arg;
@@ -355,6 +356,7 @@ void *voice_send_func(void *arg)
 
     pthread_exit(0);
 }
+
 void *voice_recv_func(void *arg)
 {
     INFO *info = (INFO *)arg;
@@ -402,6 +404,7 @@ void *voice_recv_func(void *arg)
     }
     pthread_exit(0);
 }
+
 void *voice_func(void *arg)
 {
     pthread_t recv_thread0, recv_thread1;
@@ -473,6 +476,7 @@ void *voice_func(void *arg)
     pthread_exit(0);
     return 0;
 }
+
 void *send_func(void *arg)
 {
     INFO_SEND *info_send = (INFO_SEND *)arg;
