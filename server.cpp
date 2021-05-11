@@ -7,22 +7,29 @@
 #include <errno.h>
 #include <pthread.h> //g++ -pthread -o server server.cpp
 #include <string.h>
+#include <string>
 #include <stdio.h>
 #include <dirent.h>
+#include<fstream>
 
-#define IP "192.168.140.128" //服务器IP
+//#define IP "0.0.0.0" //服务器IP
+#define IP "172.16.250.40"
 #define PORT 8000            //服务器端口号
-#define ftp_PORT 8006        //文件传输端口号
+#define ftp_PORT 8006
+#define VOICE_PORT 8088      //文件传输端口号
 #define QUE_NUM 2            //最大连接数
 #define MAX_BUFF_LEN 1024    //最大缓冲区长度
 
 int conn_fd[QUE_NUM]; //所有用户的套接字
+int voice_fd[QUE_NUM];
 int ftp_fd[QUE_NUM];  //文件传输用的套接字
 int sender;           //文件发送方info->NO
 
 using namespace std;
 
 long cur;
+
+void *recv_func(void *arg);
 
 struct INFO
 {
@@ -34,6 +41,7 @@ struct INFO
 struct INFO_SEND
 {
     //传递给send线程的所有参数
+    int num_send;
     int dst_sock_fd;           //目的用户套接字
     int NO;                    //编号
     char buffer[MAX_BUFF_LEN]; //待发送内容
@@ -60,29 +68,67 @@ char *format(char str[], int n)
     return str;
 }
 
-void ID_verify(int sock_fd)
+int ID_verify(int sock_fd)
 {
-    char Key[100] = {0};
-    char passwd[] = "syj 123";
-    char success[] = "1";
-    char fail[] = "-1";
-    while (1)
+    char signkind[5]={0};
+    recv(sock_fd, signkind, sizeof(signkind),0);
+    char signin[] = "1";
+    char signup[] = "2";
+    if(strcmp(signkind, signin) == 0)
     {
-        if (recv(sock_fd, Key, sizeof(Key), 0) > 0)
+        ifstream inFile("password.txt", ios::in);
+        if (!inFile) 
+        { //打开失败
+        cout << "error opening source file." << endl;
+            return 0;
+        }
+        char Key[100] = {0};
+        string passwd;
+        char success[] = "1";
+        char fail[] = "-1";
+        int  if_sign=0;
+        while (1)
         {
-            if (strcmp(Key, passwd) != 0)
+            if (recv(sock_fd, Key, sizeof(Key), 0) > 0)
             {
+                inFile.clear();
+                inFile.seekg(0,std::ios::beg);
+                while(!inFile.eof())
+                {
+                    getline(inFile,passwd);
+                    cout<<passwd<<endl;
+                    if (strcmp(Key, passwd.c_str()) == 0)
+                    {
+                        if_sign=1;
+                        cout << "User " << Key << " has login." << endl;
+                        send(sock_fd, success, (int)strlen(success), 0);
+                        break;
+                    }
+                    
+                }
+                if(if_sign==1)
+                    break;
                 format(Key, sizeof(Key));
+                //memset(passwd,'\0',sizeof(passwd));
                 cout << "User " << Key << " is trying to login." << endl;
                 send(sock_fd, fail, (int)strlen(fail), 0);
             }
-            else
-                break;
         }
+        inFile.close();
+        return 1;
     }
-
-    cout << "User " << Key << " has login." << endl;
-    send(sock_fd, success, (int)strlen(success), 0);
+    else if(strcmp(signkind, signup) == 0)
+    {
+        ofstream outFile("password.txt", ios::app); //以文本模式打开out.txt备写
+        outFile.seekp(0, ios::end);
+        char Key[100] = {0};
+        char success[] = "1";
+        recv(sock_fd, Key, sizeof(Key), 0);
+        outFile << Key << endl;
+        outFile.close();
+        send(sock_fd, success, (int)strlen(success), 0);
+        return 0;
+    }
 }
 
 void ftp_offline_recv(int sock_fd, CMD cmd)
@@ -296,7 +342,137 @@ void *ftp_func(void *arg)
     close(sock_fd);
     pthread_exit(0);
 }
+void *voice_send_func(void *arg)
+{
+    INFO_SEND *info_send = (INFO_SEND *)arg;
 
+    if (send(info_send->dst_sock_fd, info_send->buffer, info_send->num_send, 0) == -1)
+    {
+        cout << "send message fail" << endl;
+        pthread_exit(0);
+    }
+    cout<<info_send->num_send<<endl;
+
+    pthread_exit(0);
+}
+void *voice_recv_func(void *arg)
+{
+    INFO *info = (INFO *)arg;
+    pthread_t send_thread0,send_thread1;
+    char recv_buffer[MAX_BUFF_LEN];
+    int send_result;
+    INFO_SEND info_send;
+
+    while (1)
+    {
+
+        int num=recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) ;
+        if (num> 0)
+        {
+            cout<<"收到"<<num<<endl;
+            if (strncmp(recv_buffer, "quit", 4) == 0)
+                break;
+            info_send.num_send=num;
+            info_send.NO = info->NO;
+            info_send.dst_sock_fd = (info->NO == 0) ? voice_fd[1] : voice_fd[0];
+            memcpy(info_send.buffer, recv_buffer,num);
+
+            if(info->NO==0)
+            {
+                send_result = pthread_create(&send_thread0, NULL, voice_send_func, &info_send);
+            }
+            else if(info->NO==1)
+            {
+                send_result = pthread_create(&send_thread1, NULL, voice_send_func, &info_send);
+            }
+        }
+        if(num==0)
+        {
+            break;
+        }
+        if(info->NO==0)
+        {
+            send_result = pthread_join(send_thread0, NULL);
+        }
+        else if(info->NO==1)
+        {
+            send_result = pthread_join(send_thread1, NULL);
+        }
+
+    }
+    pthread_exit(0);
+}
+void *voice_func(void *arg)
+{
+    pthread_t recv_thread0, recv_thread1;
+    int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int recv_result[QUE_NUM];
+    int link_num = 0;                        //已连接人数
+    struct sockaddr_in client_addr[QUE_NUM]; //客户端地址数组
+    INFO info[QUE_NUM];                      //传递参数的数组
+
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(VOICE_PORT);
+    server_addr.sin_addr.s_addr = inet_addr(IP);
+
+    if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
+    {
+        cout << "bind fail" << endl;
+        cout << errno << endl;
+        exit(1);
+    }
+
+    if (listen(sock_fd, QUE_NUM) == -1)
+    {
+        cout << "listen fail" << endl;
+        exit(1);
+    }
+
+    cout << "Waiting for Connect..." << endl;
+
+    for (link_num = 0; link_num < 2; link_num++)
+    {
+        socklen_t client_addr_size = sizeof(client_addr[link_num]);
+        if ((voice_fd[link_num] = accept(sock_fd, (struct sockaddr *)&client_addr[link_num], &client_addr_size)) == -1)
+        {
+            cout << "accept fail" << endl;
+            exit(1);
+        }
+
+        cout << "User " << inet_ntoa(client_addr[link_num].sin_addr) << " Has Connect!" << endl;
+
+        info[link_num].sock_fd = voice_fd[link_num];
+        info[link_num].NO = link_num;
+
+        if (link_num == 0)
+        {
+            recv_result[link_num] = pthread_create(&recv_thread0, NULL, voice_recv_func, &info[link_num]);
+        }
+        else if (link_num == 1)
+        {
+            recv_result[link_num] = pthread_create(&recv_thread1, NULL, voice_recv_func, &info[link_num]);
+        }
+
+        if (recv_result[link_num] != 0)
+        {
+            cout << "recv_thread create fail" << endl;
+            cout << errno << endl;
+            exit(1);
+        }
+    }
+
+    recv_result[0] = pthread_join(recv_thread0, NULL);
+    recv_result[1] = pthread_join(recv_thread1, NULL);
+
+    cout << "SYSTEM: Voice call over." << endl;
+
+    for (int i = 0; i < 2; i++)
+        close(voice_fd[i]);
+    close(sock_fd);
+    pthread_exit(0);
+    return 0;
+}
 void *send_func(void *arg)
 {
     INFO_SEND *info_send = (INFO_SEND *)arg;
@@ -322,12 +498,15 @@ void *recv_func(void *arg)
     int send_result;
     INFO_SEND info_send;
 
-    ID_verify(conn_fd[info->NO]);
+    if(ID_verify(conn_fd[info->NO])==0)
+    {
+        ID_verify(conn_fd[info->NO]);
+    }
 
     while (1)
     {
-
-        if (recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0) > 0)
+        int recv_num=recv(info->sock_fd, recv_buffer, sizeof(recv_buffer), 0);
+        if ( recv_num> 0)
         {
             if (strncmp(recv_buffer, "FTP", 3) == 0)
             {
@@ -453,18 +632,35 @@ void *recv_func(void *arg)
             {
                 break;
             }
-            else
+            else if (strncmp(recv_buffer, "VOICE", 5) == 0)
             {
-                cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer << endl;
+                cout << "Receive VOICE CALL request." << endl;
 
                 info_send.NO = info->NO;
                 info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
-                strcpy(info_send.buffer, recv_buffer);
+                memcpy(info_send.buffer, recv_buffer,recv_num);
+                send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
+
+                pthread_t voice_p;
+                int voice_result = pthread_create(&voice_p, NULL, voice_func, NULL);
+                voice_result = pthread_join(voice_p, NULL);
+                cout<<"Call over.Back to main thread."<<endl;
+                continue;
+            }
+            else
+            {
+                cout << "MESSAGE RECV FROM NO." << info->NO << ": " << recv_buffer << endl;
+                
+                //cout<<"RECV:"<<recv_num<<endl;
+                info_send.NO = info->NO;
+                info_send.dst_sock_fd = (info->NO == 0) ? conn_fd[1] : conn_fd[0];
+                memcpy(info_send.buffer, recv_buffer,recv_num);
 
                 send_result = pthread_create(&send_thread, NULL, send_func, &info_send);
             }
         }
     }
+    pthread_exit(0);
 }
 
 int main()
