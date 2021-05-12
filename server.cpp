@@ -1,3 +1,9 @@
+#define IP "172.16.250.40"
+#define PORT 8000 //服务器端口号
+#define ftp_PORT 8006
+#define VOICE_PORT 8088   //文件传输端口号
+#define QUE_NUM 2         //最大连接数
+#define MAX_BUFF_LEN 1024 //最大缓冲区长度
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -11,14 +17,6 @@
 #include <stdio.h>
 #include <dirent.h>
 #include <fstream>
-
-//#define IP "0.0.0.0" //服务器IP
-#define IP "172.16.250.40"
-#define PORT 8000 //服务器端口号
-#define ftp_PORT 8006
-#define VOICE_PORT 8088   //文件传输端口号
-#define QUE_NUM 2         //最大连接数
-#define MAX_BUFF_LEN 1024 //最大缓冲区长度
 
 int conn_fd[QUE_NUM]; //所有用户的套接字
 int voice_fd[QUE_NUM];
@@ -228,19 +226,22 @@ void ftp_online(int FTP_SEND)
     while (1)
     {
         recv_ret = recv(ftp_fd[FTP_SEND], ftp_buffer, MAX_BUFF_LEN, 0);
-        cout << "recv signal: " << recv_ret << endl;
-        if (strncmp(ftp_buffer, "FTPfin", 6) == 0)
+        if (recv_ret > 0)
         {
-            sleep(1);
-            char fin[] = "FTPfin";
-            send(ftp_fd[FTP_RECV], fin, (int)strlen(fin), 0);
-            cout << "send FTPfin." << endl;
-            break;
-        }
-        else
-        {
-            send_ret = send(ftp_fd[FTP_RECV], ftp_buffer, recv_ret, 0);
-            cout << "send signal: " << send_ret << endl;
+            cout << "recv signal: " << recv_ret << endl;
+            if (strncmp(ftp_buffer, "FTPfin", 6) == 0)
+            {
+                sleep(1);
+                char fin[] = "FTPfin";
+                send(ftp_fd[FTP_RECV], fin, (int)strlen(fin), 0);
+                cout << "send FTPfin." << endl;
+                break;
+            }
+            else
+            {
+                send_ret = send(ftp_fd[FTP_RECV], ftp_buffer, recv_ret, 0);
+                cout << "send signal: " << send_ret << endl;
+            }
         }
     }
 }

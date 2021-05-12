@@ -28,23 +28,18 @@
 using namespace std;
 
 SOCKET sock;
-
 HWAVEIN hWaveIn;        //输入设备
 tWAVEFORMATEX waveform; //采集音频的格式，结构体
 char *pBuffer1;
 char *pBuffer2; //采集音频时的数据缓存
 char *pBuffer3;
 WAVEHDR wHdr1, wHdr2; //采集音频时包含数据缓存的结构体
-//FILE* pf;
-
 int bufsize = 800;
-//FILE* pcmfile;  //音频文件
 HWAVEOUT hwo;
 int nAudioOut;
 int nReceive;
 WAVEHDR pWaveHdrOut[8];
 char *outBuffer[8];
-
 long cur;
 
 struct CAudioOutData //队列结构，用来存储网络中接收到的音频数据
@@ -52,6 +47,7 @@ struct CAudioOutData //队列结构，用来存储网络中接收到的音频数
     char *lpdata;
     int dwLength;
 };
+
 struct CAudioOutData m_AudioDataOut[50];
 
 struct CMD
@@ -154,6 +150,7 @@ void login(SOCKET *soc)
     }
     printf("Authentication succeeded, linked to ChatRoom.\n");
 }
+
 void sign_up(SOCKET *soc)
 {
     system("cls");
@@ -254,9 +251,8 @@ void ftp_send(SOCKET *soc, CMD cmd)
 void ftp_recv(SOCKET *soc, CMD cmd)
 {
     cout << "ftp recv" << endl;
-    cout << "cmd.filename: " << cmd.filename << endl;
-    FILE *fp = fopen(cmd.filename, "wb"); //以二进制方式打开（创建）文件
-    char buffer[DEFAULT_BUFLEN] = {0};    //文件缓冲区
+    FILE *fp = fopen("recv_file", "wb"); //以二进制方式打开（创建）文件
+    char buffer[DEFAULT_BUFLEN] = {0};   //文件缓冲区
     int nCount;
     int sum = 0;
 
@@ -430,6 +426,7 @@ void CALLBACK WaveCallback(HWAVEOUT hWave, UINT uMsg, DWORD dwInstance, DWORD dw
     }
     }
 }
+
 void *voice_send_func(void *arg)
 {
 
@@ -492,6 +489,7 @@ void *voice_send_func(void *arg)
     pthread_exit(0);
     return 0;
 }
+
 void *voice_recv_func(void *arg)
 {
     for (int i = 0; i <= 49; i++)
@@ -655,6 +653,7 @@ void *voice_func(void *arg)
     pthread_exit(0);
     return 0;
 }
+
 void *send_func(void *arg)
 {
     char sendbuf[DEFAULT_BUFLEN];
@@ -726,6 +725,10 @@ void *send_func(void *arg)
                     cmd.method = 2;
                     strcpy(ftpreq, "online");
                     send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+                    char pos[50] = {0};
+                    cout << "Location: " << endl;
+                    cin >> pos;
+                    strcpy(cmd.filename, pos);
                     break;
                 }
                 }
@@ -816,6 +819,7 @@ void *recv_func(void *arg)
             CMD cmd;
             cmd.method = 2;
             cmd.sender = 1;
+            cmd.cur = 0;
             ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, (void *)&cmd);
             ftp_result = pthread_join(ftp_thread, NULL);
             continue;
