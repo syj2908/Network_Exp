@@ -1,4 +1,9 @@
+
+//#define IP "192.168.1.102"
+#define IP "0.0.0.0"
+
 #define IP "172.16.250.40"
+
 #define PORT 8000 //服务器端口号
 #define ftp_PORT 8006
 #define VOICE_PORT 8088   //文件传输端口号
@@ -197,6 +202,7 @@ void ftp_offline_send(int sock_fd, CMD cmd)
     while ((nCount = fread(sendbuf, 1, MAX_BUFF_LEN, fp)) > 0)
     {
         send_ret = send(sock_fd, sendbuf, nCount, 0);
+        //usleep(50);
         usleep(50);
         sum += send_ret;
         cout << "send signal:" << send_ret << endl;
