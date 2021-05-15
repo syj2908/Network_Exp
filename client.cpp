@@ -3,11 +3,9 @@
 #define DEFAULT_PORT 8000
 #define FTP_PORT 8006
 #define VOICE_PORT 8088
+#define DATASIZE 800 //分次截取数据大小
+#define IP "192.168.43.188"
 
-#define IP "172.16.250.40"
-//#define IP "124.71.224.149"
-//#define IP "192.168.43.188"
-//#define IP "192.168.140.128"
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -25,37 +23,30 @@
 #pragma comment(lib, "Mswsock.lib")
 #pragma comment(lib, "AdvApi32.lib")
 #pragma comment(lib, "pthreadVC2.lib")
-#pragma comment(lib, "winmm.lib")  
+#pragma comment(lib, "winmm.lib")
 using namespace std;
 
-
 SOCKET sock;
-
-HWAVEIN hWaveIn;  //输入设备
+HWAVEIN hWaveIn;        //输入设备
 tWAVEFORMATEX waveform; //采集音频的格式，结构体
-char* pBuffer1;
-char* pBuffer2;//采集音频时的数据缓存
-char* pBuffer3;
+char *pBuffer1;
+char *pBuffer2; //采集音频时的数据缓存
+char *pBuffer3;
 WAVEHDR wHdr1, wHdr2; //采集音频时包含数据缓存的结构体
-//FILE* pf;
-
-
-#define DATASIZE 800//分次截取数据大小
-int  bufsize = 800;
-//FILE* pcmfile;  //音频文件
-HWAVEOUT   hwo;
+int bufsize = 800;
+HWAVEOUT hwo;
 int nAudioOut;
 int nReceive;
-WAVEHDR		pWaveHdrOut[8];
-char* outBuffer[8];
-
+WAVEHDR pWaveHdrOut[8];
+char *outBuffer[8];
 long cur;
 
-struct CAudioOutData	//队列结构，用来存储网络中接收到的音频数据
+struct CAudioOutData //队列结构，用来存储网络中接收到的音频数据
 {
-    char* lpdata;
-    int  dwLength;
+    char *lpdata;
+    int dwLength;
 };
+
 struct CAudioOutData m_AudioDataOut[50];
 
 struct CMD
@@ -71,7 +62,7 @@ struct CMD
 };
 
 void login(SOCKET *soc);
-void sign_up(SOCKET* soc);
+void sign_up(SOCKET *soc);
 void ftp_send(SOCKET *soc, CMD cmd);
 void ftp_recv(SOCKET *soc, CMD cmd);
 void *send_func(void *arg);
@@ -120,11 +111,11 @@ void login(SOCKET *soc)
     system("cls");
     char signin[] = "1";
     send(*soc, signin, (int)strlen(signin), 0);
-    char username[20] = { 0 };
-    char passwd[20] = { 0 };
-    char uname_pwd[50] = { 0 };
+    char username[20] = {0};
+    char passwd[20] = {0};
+    char uname_pwd[50] = {0};
     char space[] = " ";
-    char rec_log[10] = { 0 };
+    char rec_log[10] = {0};
 
     cout << "------------------------------------------------------------------------" << endl;
 
@@ -158,17 +149,18 @@ void login(SOCKET *soc)
     }
     printf("Authentication succeeded, linked to ChatRoom.\n");
 }
-void sign_up(SOCKET* soc)
+
+void sign_up(SOCKET *soc)
 {
     system("cls");
 
     char signup[] = "2";
     send(*soc, signup, (int)strlen(signup), 0);
-    char username[20] = { 0 };
-    char passwd[20] = { 0 };
-    char uname_pwd[50] = { 0 };
+    char username[20] = {0};
+    char passwd[20] = {0};
+    char uname_pwd[50] = {0};
     char space[] = " ";
-    char rec_log[10] = { 0 };
+    char rec_log[10] = {0};
 
     cout << "------------------------------------------------------------------------" << endl;
 
@@ -255,12 +247,51 @@ void ftp_send(SOCKET *soc, CMD cmd)
     cout << "Done." << endl;
 }
 
-void ftp_recv(SOCKET *soc, CMD cmd)
+void ftp_recv_online(SOCKET *soc, CMD cmd)
 {
     cout << "ftp recv" << endl;
-    cout << "cmd.filename: " << cmd.filename << endl;
+    FILE *fp = fopen("recv_file", "wb"); //以二进制方式打开（创建）文件
+
+    char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
+    int nCount;
+    int sum = 0;
+
+    while (1)
+    {
+        nCount = recv(*soc, buffer, DEFAULT_BUFLEN, 0);
+        cout << "recv signal: " << nCount << endl;
+        if (strncmp(buffer, "FTPfin", 6) == 0)
+            break;
+        if (nCount > 0)
+        {
+            fwrite(buffer, nCount, 1, fp);
+        }
+        sum += nCount;
+    }
+
+    cout << "sum bytes received: " << sum << endl;
+    fclose(fp);
+
+    char newname[DEFAULT_BUFLEN] = {0};
+    int len = strlen(cmd.filename);
+    strncat(newname, cmd.filename, len - 4);
+    cout << "cmd.filename=" << cmd.filename << endl;
+    cout << "newname=" << newname << endl;
+    int re_ret = rename(cmd.filename, newname);
+    if (re_ret != 0)
+    {
+        cout << "re_ret=" << re_ret << endl;
+        cout << errno << endl;
+    }
+    cout << "File transfer success!" << endl;
+}
+
+void ftp_recv_offline(SOCKET *soc, CMD cmd)
+{
+    cout << "ftp recv" << endl;
     FILE *fp = fopen(cmd.filename, "ab"); //以二进制方式打开（创建）文件
-    char buffer[DEFAULT_BUFLEN] = {0};    //文件缓冲区
+
+    char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
     int nCount;
     int sum = 0;
 
@@ -336,7 +367,7 @@ void *ftp_func(void *arg)
         }
         else if (cmd.sender == 1)
         {
-            ftp_recv(&ftpsock, cmd);
+            ftp_recv_offline(&ftpsock, cmd);
         }
     }
     else if (cmd.method == 2)
@@ -355,7 +386,7 @@ void *ftp_func(void *arg)
             char signal[] = "I am receiver.";
             send(ftpsock, signal, (int)strlen(signal), 0);
             cout << "ID send." << endl;
-            ftp_recv(&ftpsock, cmd);
+            ftp_recv_online(&ftpsock, cmd);
         }
     }
 
@@ -365,12 +396,12 @@ void *ftp_func(void *arg)
     return 0;
 }
 
-void CALLBACK waveInProc(HWAVEIN hWave, UINT uMsg, DWORD dwInstance, DWORD dw1, DWORD dw2)//回调函数
+void CALLBACK waveInProc(HWAVEIN hWave, UINT uMsg, DWORD dwInstance, DWORD dw1, DWORD dw2) //回调函数
 {
 
     switch (uMsg)
     {
-    case WIM_DATA://缓冲录满或停止录音消息
+    case WIM_DATA: //缓冲录满或停止录音消息
     {
         LPWAVEHDR pWaveHeader = (LPWAVEHDR)dw1;
         int result;
@@ -381,7 +412,7 @@ void CALLBACK waveInProc(HWAVEIN hWave, UINT uMsg, DWORD dwInstance, DWORD dw1, 
         waveInAddBuffer(hWaveIn, pWaveHeader, sizeof(WAVEHDR));
         break;
     }
-    case WIM_CLOSE://音频输入设备关闭消息
+    case WIM_CLOSE: //音频输入设备关闭消息
     {
         waveInUnprepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));
         waveInUnprepareHeader(hWaveIn, &wHdr2, sizeof(WAVEHDR));
@@ -390,19 +421,18 @@ void CALLBACK waveInProc(HWAVEIN hWave, UINT uMsg, DWORD dwInstance, DWORD dw1, 
     }
 }
 
-void CALLBACK WaveCallback(HWAVEOUT hWave, UINT uMsg, DWORD dwInstance, DWORD dw1, DWORD dw2)//回调函数
+void CALLBACK WaveCallback(HWAVEOUT hWave, UINT uMsg, DWORD dwInstance, DWORD dw1, DWORD dw2) //回调函数
 {
     switch (uMsg)
     {
-    case WOM_DONE://上次缓存播放完成,触发该事件
+    case WOM_DONE: //上次缓存播放完成,触发该事件
     {
         LPWAVEHDR pWaveHeader = (LPWAVEHDR)dw1;
         pWaveHeader->dwBufferLength = DATASIZE;
         memcpy(
             pWaveHeader->lpData,
             m_AudioDataOut[nAudioOut].lpdata,
-            m_AudioDataOut[nAudioOut].dwLength
-        );
+            m_AudioDataOut[nAudioOut].dwLength);
         //fwrite(m_AudioDataOut[nAudioOut].lpdata, 1, m_AudioDataOut[nAudioOut].dwLength, pcmfile);
         waveOutPrepareHeader(hwo, pWaveHeader, sizeof(WAVEHDR));
         waveOutWrite(hwo, pWaveHeader, sizeof(WAVEHDR));
@@ -417,7 +447,7 @@ void CALLBACK WaveCallback(HWAVEOUT hWave, UINT uMsg, DWORD dwInstance, DWORD dw
     }
     case WOM_CLOSE:
     {
-        for (int i = 0; i < 8; i++)  // 释 放资源
+        for (int i = 0; i < 8; i++) // 释放资源
         {
             waveOutUnprepareHeader(hwo, &(pWaveHdrOut[i]), sizeof(WAVEHDR));
             if (&pWaveHdrOut[i])
@@ -425,32 +455,29 @@ void CALLBACK WaveCallback(HWAVEOUT hWave, UINT uMsg, DWORD dwInstance, DWORD dw
                 free(&pWaveHdrOut[i]);
 
                 //pWaveHdrOut[i] = NULL;
-
             }
             if (outBuffer[i])
             {
                 free(outBuffer[i]);
                 outBuffer[i] = NULL;
-
             }
         }
-
     }
     }
 }
-void* voice_send_func(void* arg)
+
+void *voice_send_func(void *arg)
 {
 
     sock = (SOCKET)arg;
 
-
-    waveform.wFormatTag = WAVE_FORMAT_PCM;//声音格式为PCM
-    waveform.nSamplesPerSec = 8000;//采样率，16000次/秒
-    waveform.wBitsPerSample = 16;//采样比特，16bits/次
-    waveform.nChannels = 1;//采样声道数，2声道
-    waveform.nAvgBytesPerSec = 16000;//每秒的数据率，就是每秒能采集多少字节的数据
-    waveform.nBlockAlign = 2;//一个块的大小，采样bit的字节数乘以声道数
-    waveform.cbSize = 0;//一般为0
+    waveform.wFormatTag = WAVE_FORMAT_PCM; //声音格式为PCM
+    waveform.nSamplesPerSec = 8000;        //采样率，16000次/秒
+    waveform.wBitsPerSample = 16;          //采样比特，16bits/次
+    waveform.nChannels = 1;                //采样声道数，2声道
+    waveform.nAvgBytesPerSec = 16000;      //每秒的数据率，就是每秒能采集多少字节的数据
+    waveform.nBlockAlign = 2;              //一个块的大小，采样bit的字节数乘以声道数
+    waveform.cbSize = 0;                   //一般为0
 
     waveInOpen(&hWaveIn, WAVE_MAPPER, &waveform, (DWORD_PTR)waveInProc, 0L, CALLBACK_FUNCTION);
 
@@ -467,8 +494,7 @@ void* voice_send_func(void* arg)
     wHdr1.dwFlags = 0;
     wHdr1.dwLoops = 1;
     wHdr1.lpNext = NULL;
-    waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
-
+    waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR)); //准备一个波形数据块头用于录音
 
     wHdr2.lpData = (LPSTR)pBuffer2;
     wHdr2.dwBufferLength = bufsize;
@@ -477,14 +503,14 @@ void* voice_send_func(void* arg)
     wHdr2.dwFlags = 0;
     wHdr2.dwLoops = 1;
     wHdr2.lpNext = NULL;
-    waveInPrepareHeader(hWaveIn, &wHdr2, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
+    waveInPrepareHeader(hWaveIn, &wHdr2, sizeof(WAVEHDR)); //准备一个波形数据块头用于录音
 
-    waveInAddBuffer(hWaveIn, &wHdr1, sizeof(WAVEHDR));//指定波形数据块为录音输入缓存
+    waveInAddBuffer(hWaveIn, &wHdr1, sizeof(WAVEHDR)); //指定波形数据块为录音输入缓存
     waveInAddBuffer(hWaveIn, &wHdr2, sizeof(WAVEHDR));
 
-    waveInStart(hWaveIn);//开始录音
+    waveInStart(hWaveIn); //开始录音
     cout << "test" << endl;
-    
+
     while (1)
     {
         if (_kbhit() && _getch() == 0x1b)
@@ -493,16 +519,17 @@ void* voice_send_func(void* arg)
             break;
         }
     }
-    waveInReset(hWaveIn);//停止录音
+    waveInReset(hWaveIn); //停止录音
     delete pBuffer1;
     delete pBuffer2;
-    
+
     waveInClose(hWaveIn);
 
     pthread_exit(0);
     return 0;
 }
-void* voice_recv_func(void* arg)
+
+void *voice_recv_func(void *arg)
 {
     for (int i = 0; i <= 49; i++)
     {
@@ -511,7 +538,8 @@ void* voice_recv_func(void* arg)
     nReceive = 0;
     SOCKET rece_sock = (SOCKET)arg;
 
-    do {
+    do
+    {
 
         m_AudioDataOut[nReceive].dwLength = recv(rece_sock, m_AudioDataOut[nReceive].lpdata, DATASIZE, 0);
         if (m_AudioDataOut[nReceive].dwLength > 0)
@@ -527,7 +555,7 @@ void* voice_recv_func(void* arg)
         {
             printf("Connection closed\n");
             break;
-        }     
+        }
         else
         {
             printf("recv failed with error: %d\n", WSAGetLastError());
@@ -539,31 +567,31 @@ void* voice_recv_func(void* arg)
     return 0;
 }
 
-void* vout(void* arg)
+void *vout(void *arg)
 {
 
-    WAVEFORMATEX    wfx;
-    
+    WAVEFORMATEX wfx;
+
     //fopen_s(&pcmfile, "test1.pcm", "wb");//打开文件
 
-    wfx.wFormatTag = WAVE_FORMAT_PCM;//设置波形声音的格式
-    wfx.nChannels = 1;//设置音频文件的通道数量
-    wfx.nSamplesPerSec = 8000;//设置每个声道播放和记录时的样本频率
-    wfx.nAvgBytesPerSec = 16000;//设置请求的平均数据传输率,单位byte/s。这个值对于创建缓冲大小是很有用的
-    wfx.nBlockAlign = 2;//以字节为单位设置块对齐
+    wfx.wFormatTag = WAVE_FORMAT_PCM; //设置波形声音的格式
+    wfx.nChannels = 1;                //设置音频文件的通道数量
+    wfx.nSamplesPerSec = 8000;        //设置每个声道播放和记录时的样本频率
+    wfx.nAvgBytesPerSec = 16000;      //设置请求的平均数据传输率,单位byte/s。这个值对于创建缓冲大小是很有用的
+    wfx.nBlockAlign = 2;              //以字节为单位设置块对齐
     wfx.wBitsPerSample = 16;
-    wfx.cbSize = 0;//额外信息的大小
+    wfx.cbSize = 0; //额外信息的大小
 
-    waveOutOpen(&hwo, WAVE_MAPPER, &wfx, (DWORD)WaveCallback, NULL, CALLBACK_FUNCTION);//打开一个给定的波形音频输出装置来进行声音播放
+    waveOutOpen(&hwo, WAVE_MAPPER, &wfx, (DWORD)WaveCallback, NULL, CALLBACK_FUNCTION); //打开一个给定的波形音频输出装置来进行声音播放
 
     int BufferNum = 8;
-    
+
     for (int i = 0; i < BufferNum; i++)
     {
         outBuffer[i] = new char[DATASIZE];
     }
-    for (int i = 0; i < BufferNum; i++)     // BufferNum 为输出缓冲块数
-    {   // outBuffer[i]是每一块缓冲区的 首地址，为short类型
+    for (int i = 0; i < BufferNum; i++) // BufferNum 为输出缓冲块数
+    {                                   // outBuffer[i]是每一块缓冲区的 首地址，为short类型
         pWaveHdrOut[i].lpData = (LPSTR)outBuffer[i];
         pWaveHdrOut[i].dwBufferLength = DATASIZE;
         pWaveHdrOut[i].dwBytesRecorded = 0;
@@ -574,12 +602,11 @@ void* vout(void* arg)
         pWaveHdrOut[i].reserved = 0;
     }
 
-
     nAudioOut = 0;
 
     while (1)
-    { // nReceive 是网络音频接收指针在循环队列中的位置
-        if (nReceive > 2)   // 当接收到的数据大于1帧时才启动声卡输出
+    {                     // nReceive 是网络音频接收指针在循环队列中的位置
+        if (nReceive > 2) // 当接收到的数据大于1帧时才启动声卡输出
         {
             for (int i = 0; i < BufferNum; i++)
             { // 启动音频输出所有缓冲区块
@@ -602,10 +629,9 @@ void* vout(void* arg)
     waveOutClose(hwo);
     pthread_exit(0);
     return 0;
-    
 }
 
-void* voice_func(void* arg)
+void *voice_func(void *arg)
 {
     WORD sockVersion = MAKEWORD(2, 2);
     WSADATA data;
@@ -630,7 +656,7 @@ void* voice_func(void* arg)
 
     cout << "Connecting to voice call service." << endl;
 
-    if (connect(voicesock, (sockaddr*)&serAddr, sizeof(serAddr)) == SOCKET_ERROR)
+    if (connect(voicesock, (sockaddr *)&serAddr, sizeof(serAddr)) == SOCKET_ERROR)
     {
         cout << "voice_func Connect error." << endl;
         closesocket(voicesock);
@@ -641,11 +667,11 @@ void* voice_func(void* arg)
     pthread_t send_p;
     pthread_t voice_out;
 
-    int send_result, recv_result,vout_result;
+    int send_result, recv_result, vout_result;
 
-    send_result = pthread_create(&send_p, NULL, voice_send_func, (void*)voicesock);
-    recv_result = pthread_create(&recv_p, NULL, voice_recv_func, (void*)voicesock);
-    vout_result=pthread_create(&voice_out, NULL, vout, (void*)voicesock);
+    send_result = pthread_create(&send_p, NULL, voice_send_func, (void *)voicesock);
+    recv_result = pthread_create(&recv_p, NULL, voice_recv_func, (void *)voicesock);
+    vout_result = pthread_create(&voice_out, NULL, vout, (void *)voicesock);
 
     if (send_result != 0)
     {
@@ -660,12 +686,13 @@ void* voice_func(void* arg)
 
     send_result = pthread_join(send_p, NULL);
     recv_result = pthread_join(recv_p, NULL);
-    vout_result= pthread_join(voice_out, NULL);
+    vout_result = pthread_join(voice_out, NULL);
     closesocket(voicesock);
     WSACleanup();
     pthread_exit(0);
     return 0;
 }
+
 void *send_func(void *arg)
 {
     char sendbuf[DEFAULT_BUFLEN];
@@ -691,7 +718,7 @@ void *send_func(void *arg)
                 pthread_t voice_thread;
                 int voice_result;
                 int a = 0;
-                voice_result = pthread_create(&voice_thread, NULL, voice_func, (void*)&a);
+                voice_result = pthread_create(&voice_thread, NULL, voice_func, (void *)&a);
                 voice_result = pthread_join(voice_thread, NULL);
                 cout << "Back to main thread." << endl;
                 continue;
@@ -737,6 +764,10 @@ void *send_func(void *arg)
                     cmd.method = 2;
                     strcpy(ftpreq, "online");
                     send(send_sock, ftpreq, (int)strlen(ftpreq), 0);
+                    char pos[50] = {0};
+                    cout << "Location: " << endl;
+                    cin >> pos;
+                    strcpy(cmd.filename, pos);
                     break;
                 }
                 }
@@ -758,6 +789,7 @@ void *send_func(void *arg)
                 CMD cmd;
                 cmd.method = 1;
                 cmd.sender = 1;
+                cmd.cur = 0;
                 char filename[DEFAULT_BUFLEN];
                 format(sendbuf, sizeof(sendbuf));
                 strcpy(filename, sendbuf + 4);
@@ -784,6 +816,7 @@ void *send_func(void *arg)
                         pFile = fopen(filepath, "rb");
                         fseek(pFile, 0, SEEK_END);
                         cmd.cur = ftell(pFile);
+                        fclose(pFile);
                         break;
                     }
                 }
@@ -827,6 +860,7 @@ void *recv_func(void *arg)
             CMD cmd;
             cmd.method = 2;
             cmd.sender = 1;
+            cmd.cur = 0;
             ftp_result = pthread_create(&ftp_thread, NULL, ftp_func, (void *)&cmd);
             ftp_result = pthread_join(ftp_thread, NULL);
             continue;
