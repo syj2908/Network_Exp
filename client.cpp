@@ -4,8 +4,7 @@
 #define FTP_PORT 8006
 #define VOICE_PORT 8088
 #define DATASIZE 800 //分次截取数据大小
-#define IP "172.16.250.40"
-//#define IP "124.71.224.149"
+#define IP "192.168.43.188"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -248,11 +247,51 @@ void ftp_send(SOCKET *soc, CMD cmd)
     cout << "Done." << endl;
 }
 
-void ftp_recv(SOCKET *soc, CMD cmd)
+void ftp_recv_online(SOCKET *soc, CMD cmd)
 {
     cout << "ftp recv" << endl;
     FILE *fp = fopen("recv_file", "wb"); //以二进制方式打开（创建）文件
-    char buffer[DEFAULT_BUFLEN] = {0};   //文件缓冲区
+
+    char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
+    int nCount;
+    int sum = 0;
+
+    while (1)
+    {
+        nCount = recv(*soc, buffer, DEFAULT_BUFLEN, 0);
+        cout << "recv signal: " << nCount << endl;
+        if (strncmp(buffer, "FTPfin", 6) == 0)
+            break;
+        if (nCount > 0)
+        {
+            fwrite(buffer, nCount, 1, fp);
+        }
+        sum += nCount;
+    }
+
+    cout << "sum bytes received: " << sum << endl;
+    fclose(fp);
+
+    char newname[DEFAULT_BUFLEN] = {0};
+    int len = strlen(cmd.filename);
+    strncat(newname, cmd.filename, len - 4);
+    cout << "cmd.filename=" << cmd.filename << endl;
+    cout << "newname=" << newname << endl;
+    int re_ret = rename(cmd.filename, newname);
+    if (re_ret != 0)
+    {
+        cout << "re_ret=" << re_ret << endl;
+        cout << errno << endl;
+    }
+    cout << "File transfer success!" << endl;
+}
+
+void ftp_recv_offline(SOCKET *soc, CMD cmd)
+{
+    cout << "ftp recv" << endl;
+    FILE *fp = fopen(cmd.filename, "ab"); //以二进制方式打开（创建）文件
+
+    char buffer[DEFAULT_BUFLEN] = {0}; //文件缓冲区
     int nCount;
     int sum = 0;
 
@@ -328,7 +367,7 @@ void *ftp_func(void *arg)
         }
         else if (cmd.sender == 1)
         {
-            ftp_recv(&ftpsock, cmd);
+            ftp_recv_offline(&ftpsock, cmd);
         }
     }
     else if (cmd.method == 2)
@@ -347,7 +386,7 @@ void *ftp_func(void *arg)
             char signal[] = "I am receiver.";
             send(ftpsock, signal, (int)strlen(signal), 0);
             cout << "ID send." << endl;
-            ftp_recv(&ftpsock, cmd);
+            ftp_recv_online(&ftpsock, cmd);
         }
     }
 
@@ -750,6 +789,7 @@ void *send_func(void *arg)
                 CMD cmd;
                 cmd.method = 1;
                 cmd.sender = 1;
+                cmd.cur = 0;
                 char filename[DEFAULT_BUFLEN];
                 format(sendbuf, sizeof(sendbuf));
                 strcpy(filename, sendbuf + 4);
@@ -776,6 +816,7 @@ void *send_func(void *arg)
                         pFile = fopen(filepath, "rb");
                         fseek(pFile, 0, SEEK_END);
                         cmd.cur = ftell(pFile);
+                        fclose(pFile);
                         break;
                     }
                 }
